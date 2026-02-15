@@ -3,7 +3,6 @@ import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
 
 // --- DB 타입 매핑 인터페이스 ---
-// Supabase 테이블의 컬럼명(snake_case)과 매칭
 interface DbCharacter {
   id: string;
   campaign_id: string;
@@ -42,27 +41,26 @@ interface DbCampaign {
   description: string | null;
 }
 
+// Helper: UUID 검증 (DB 오류 방지)
+const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 // --- 전체 상태 로딩 ---
 
 export const loadFullState = async (): Promise<AppState> => {
   try {
-    // 1. Settings (비밀번호, 배경)
     const { data: settingsData, error: settingsError } = await supabase
       .from('settings')
       .select('*')
       .single();
     
-    // 2. Campaigns
     const { data: campaignsData, error: campError } = await supabase
       .from('campaigns')
       .select('*');
 
-    // 3. Characters
     const { data: charData, error: charError } = await supabase
       .from('characters')
       .select('*');
 
-    // 4. Extra Files
     const { data: fileData, error: fileError } = await supabase
       .from('extra_files')
       .select('*');
@@ -72,7 +70,6 @@ export const loadFullState = async (): Promise<AppState> => {
     if (charError) console.error('Character Error:', charError);
     if (fileError) console.error('File Error:', fileError);
 
-    // DB 데이터를 앱 상태로 변환
     const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
       id: c.id,
       name: c.name,
@@ -86,7 +83,6 @@ export const loadFullState = async (): Promise<AppState> => {
     const files = (fileData || []) as DbExtraFile[];
 
     const characters: Character[] = (charData || []).map((c: DbCharacter) => {
-      // 해당 캐릭터의 추가 파일 필터링
       const myFiles: ExtraFile[] = files
         .filter(f => f.character_id === c.id)
         .map(f => ({
@@ -134,7 +130,6 @@ export const loadFullState = async (): Promise<AppState> => {
 // --- 저장/삭제 작업 (CRUD) ---
 
 export const saveSettings = async (password: string, globalBackgrounds: string[]) => {
-  // 설정 테이블은 단일 행으로 관리 (ID 1 또는 첫 번째 행)
   const { data } = await supabase.from('settings').select('id').limit(1);
   
   if (data && data.length > 0) {
@@ -151,6 +146,9 @@ export const saveSettings = async (password: string, globalBackgrounds: string[]
 };
 
 export const saveCampaign = async (campaign: Campaign) => {
+  // UUID가 아닌 경우(레거시 데이터) 저장 건너뛰기
+  if (!isUuid(campaign.id)) return;
+
   const dbCamp = {
     id: campaign.id,
     name: campaign.name,
@@ -166,11 +164,36 @@ export const saveCampaign = async (campaign: Campaign) => {
 };
 
 export const deleteCampaign = async (id: string) => {
+  // 1. UUID 검증: 로컬 더미 데이터라면 DB 요청 없이 종료 (성공 처리)
+  if (!isUuid(id)) return;
+
+  // 2. 수동 Cascade: 하위 데이터를 명시적으로 먼저 삭제 (DB 제약조건 오류 방지)
+  try {
+    // 캠페인에 속한 캐릭터 ID 조회
+    const { data: chars } = await supabase.from('characters').select('id').eq('campaign_id', id);
+    
+    if (chars && chars.length > 0) {
+      const charIds = chars.map(c => c.id);
+      
+      // 캐릭터에 속한 추가 파일 삭제
+      await supabase.from('extra_files').delete().in('character_id', charIds);
+      
+      // 캐릭터 삭제
+      await supabase.from('characters').delete().eq('campaign_id', id);
+    }
+  } catch (e) {
+    console.warn("Cascade delete warning:", e);
+    // 계속 진행 (DB 레벨 Cascade가 있을 수 있음)
+  }
+
+  // 3. 캠페인 삭제
   const { error } = await supabase.from('campaigns').delete().eq('id', id);
   if (error) throw error;
 };
 
 export const saveCharacter = async (char: Character) => {
+  if (!isUuid(char.id)) return;
+
   // 1. 캐릭터 기본 정보 저장
   const dbChar = {
     id: char.id,
@@ -194,12 +217,11 @@ export const saveCharacter = async (char: Character) => {
   if (charError) throw charError;
 
   // 2. 추가 파일 처리
-  // 기존 파일들을 삭제하고 현재 상태로 다시 저장 (복잡한 diff 방지)
   await supabase.from('extra_files').delete().eq('character_id', char.id);
 
   if (char.extraFiles.length > 0) {
     const dbFiles = char.extraFiles.map(f => ({
-      id: f.id,
+      id: isUuid(f.id) ? f.id : crypto.randomUUID(), // 파일 ID도 UUID 보장
       character_id: char.id,
       title: f.title,
       content: f.content,
@@ -214,11 +236,15 @@ export const saveCharacter = async (char: Character) => {
 };
 
 export const deleteCharacter = async (id: string) => {
+  if (!isUuid(id)) return;
+
+  // 수동 Cascade: 파일 먼저 삭제
+  await supabase.from('extra_files').delete().eq('character_id', id);
+
   const { error } = await supabase.from('characters').delete().eq('id', id);
   if (error) throw error;
 };
 
-// 유틸리티: File -> Base64 (이미지 업로드용)
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
