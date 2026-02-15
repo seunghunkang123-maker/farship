@@ -17,10 +17,10 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
-  isOpen, onClose, campaigns, globalBackgrounds, currentCampaignId,
-  onUpdateCampaign, onAddCampaign, onDeleteCampaign, onUpdateGlobalBackgrounds
+  isOpen, onClose, campaigns, currentCampaignId,
+  onUpdateCampaign, onAddCampaign, onDeleteCampaign
 }) => {
-  const [activeTab, setActiveTab] = useState<'GLOBAL' | 'CAMPAIGN'>('GLOBAL');
+  // Default to Campaign view since we removed Global Backgrounds
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(currentCampaignId || campaigns[0]?.id);
   
   // New Campaign State
@@ -29,19 +29,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newCampSys, setNewCampSys] = useState<SystemType>(SystemType.DND5E);
 
   if (!isOpen) return null;
-
-  const handleGlobalBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const base64 = await fileToBase64(e.target.files[0]);
-      onUpdateGlobalBackgrounds([...globalBackgrounds, base64]);
-    }
-  };
-
-  const removeGlobalBg = (idx: number) => {
-    const next = [...globalBackgrounds];
-    next.splice(idx, 1);
-    onUpdateGlobalBackgrounds(next);
-  };
 
   const createCampaign = () => {
     if (!newCampName) return;
@@ -71,9 +58,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      {/* Stone-900 Background to match Adventure Theme */}
-      <div className="bg-[#1c1917] border border-stone-700 w-full max-w-4xl max-h-[90vh] rounded-xl flex flex-col shadow-2xl relative overflow-hidden">
-        {/* Decorative Overlay similar to Main Dashboard */}
+      {/* Fixed height using h-[80vh] */}
+      <div className="bg-[#1c1917] border border-stone-700 w-full max-w-4xl h-[80vh] rounded-xl flex flex-col shadow-2xl relative overflow-hidden transition-all duration-300">
+        {/* Decorative Overlay */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-transparent to-transparent pointer-events-none" />
 
         <div className="flex justify-between items-center p-6 border-b border-stone-800 relative z-10">
@@ -83,48 +70,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <button onClick={onClose} className="text-stone-400 hover:text-white"><Icons.Close /></button>
         </div>
 
+        {/* Tab Headers (Simplified) */}
         <div className="flex border-b border-stone-800 relative z-10">
-          <button 
-            onClick={() => setActiveTab('GLOBAL')}
-            className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'GLOBAL' ? 'text-amber-500 border-b-2 border-amber-500 bg-white/5' : 'text-stone-500 hover:text-stone-300'}`}
-          >메인 / 전체 설정</button>
-          <button 
-            onClick={() => setActiveTab('CAMPAIGN')}
-            className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'CAMPAIGN' ? 'text-amber-500 border-b-2 border-amber-500 bg-white/5' : 'text-stone-500 hover:text-stone-300'}`}
-          >캠페인 관리</button>
+          <div className="px-6 py-3 text-sm font-bold text-amber-500 border-b-2 border-amber-500 bg-white/5 flex items-center gap-2">
+            <Icons.Folder size={14}/> 캠페인 관리
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 relative z-10 custom-scrollbar">
-          {activeTab === 'GLOBAL' && (
-            <div className="space-y-8">
-              <section>
-                <h3 className="text-sm font-bold text-amber-500/80 mb-4 uppercase tracking-wider flex items-center gap-2">
-                   <Icons.Image size={16} />
-                   메인 배경 이미지 (순환)
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {globalBackgrounds.map((bg, idx) => (
-                    <div key={idx} className="relative aspect-video bg-stone-800 rounded overflow-hidden group border border-stone-700 hover:border-amber-500/50 transition-colors shadow-lg">
-                      <img src={bg} className="w-full h-full object-cover" alt="bg" />
-                      <button 
-                        onClick={() => removeGlobalBg(idx)}
-                        className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
-                      >
-                        <Icons.Trash size={12} />
-                      </button>
-                    </div>
-                  ))}
-                  <label className="flex flex-col items-center justify-center aspect-video border-2 border-dashed border-stone-700 hover:border-amber-500/50 bg-black/20 rounded cursor-pointer transition-colors text-stone-500 hover:text-amber-500">
-                    <Icons.Upload size={24} className="mb-2" />
-                    <span className="text-xs">이미지 추가</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleGlobalBgUpload} />
-                  </label>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {activeTab === 'CAMPAIGN' && (
             <div className="flex flex-col md:flex-row gap-6 h-full">
                {/* Sidebar List */}
                <div className="w-full md:w-1/3 border-r border-stone-800 pr-0 md:pr-6 space-y-4">
@@ -236,7 +189,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                  )}
                </div>
             </div>
-          )}
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Campaign } from '../../types';
 import { Icons } from '../ui/Icons';
@@ -10,22 +11,24 @@ interface MainDashboardProps {
 
 const MainDashboard: React.FC<MainDashboardProps> = ({ campaigns, onSelectCampaign, onOpenSettings }) => {
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-4 md:p-12 relative">
-      {/* Decorative Background Elements */}
-      <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none z-0" />
+    <div className="flex flex-col h-full overflow-y-auto p-4 md:p-12 relative custom-scrollbar">
       
-      {/* Header - 원양어선 Team Brand Area */}
-      <header className="flex flex-col items-center justify-center mb-24 relative z-10 animate-in fade-in slide-in-from-top-4 duration-700 mt-8">
+      {/* Header - Logo Only Area */}
+      <header className="flex flex-col items-center justify-center mb-16 relative z-10 animate-in fade-in slide-in-from-top-4 duration-700 mt-16">
         
         {/* Settings Button (Top Right) */}
         <div className="absolute right-0 top-0">
           <button
             onClick={onOpenSettings}
-            className="group flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white bg-slate-800/30 hover:bg-slate-700/50 border border-white/5 hover:border-white/20 rounded-full transition-all duration-300 backdrop-blur-md"
+            className="group flex items-center p-3 text-stone-500 hover:text-amber-500 bg-stone-900/50 hover:bg-stone-800 border border-stone-800 hover:border-amber-900/50 rounded-full transition-all duration-500 backdrop-blur-md shadow-lg"
             title="설정"
           >
-            <span className="text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0 duration-300 hidden md:inline-block">SYSTEM CONFIG</span>
-            <Icons.Settings size={18} className="transition-transform group-hover:rotate-90" />
+            <div className="max-w-0 group-hover:max-w-[120px] overflow-hidden transition-all duration-500 ease-out">
+              <span className="text-xs font-bold whitespace-nowrap pl-1 pr-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75 tracking-wider font-mono text-amber-500">
+                SYSTEM CONFIG
+              </span>
+            </div>
+            <Icons.Settings size={20} className="transition-transform duration-700 ease-in-out group-hover:rotate-180" />
           </button>
         </div>
         
@@ -33,136 +36,108 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ campaigns, onSelectCampai
         <div className="relative group cursor-default flex flex-col items-center">
           
           {/* Decorative Top Line */}
-          <div className="flex items-center gap-4 text-slate-500 mb-4 opacity-60">
-             <Icons.Clover size={16} className="text-amber-700" />
-             <div className="h-px w-24 bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
-             <span className="text-[10px] font-mono tracking-[0.3em] uppercase">Adventure Ticket</span>
-             <div className="h-px w-24 bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
-             <Icons.Clover size={16} className="text-amber-700" />
+          <div className="flex items-center gap-4 text-stone-600 mb-6 opacity-60">
+             <Icons.Clover size={14} className="text-amber-800" />
+             <div className="h-px w-16 bg-gradient-to-r from-transparent via-amber-900/50 to-transparent" />
+             <span className="text-[10px] font-serif tracking-[0.4em] uppercase text-amber-900/70">Archive</span>
+             <div className="h-px w-16 bg-gradient-to-r from-transparent via-amber-900/50 to-transparent" />
+             <Icons.Clover size={14} className="text-amber-800" />
           </div>
 
           {/* Logo Circle */}
-          <div className="relative w-40 h-40 mb-6">
-             {/* Rotating Border */}
-             <div className="absolute inset-0 rounded-full border border-dashed border-slate-600 animate-[spin_60s_linear_infinite] opacity-30" />
-             <div className="absolute inset-2 rounded-full border border-double border-amber-800/40" />
+          <div className="relative w-40 h-40 mb-2">
+             {/* Glowing Background */}
+             <div className="absolute inset-0 bg-amber-500/5 blur-3xl rounded-full" />
              
              {/* Center Icon */}
-             <div className="absolute inset-0 flex items-center justify-center text-slate-200 drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
-                <div className="relative z-10">
-                  <Icons.Ship size={64} strokeWidth={1.5} />
-                </div>
-                {/* Waves behind */}
-                <div className="absolute bottom-8 text-blue-500/20 z-0 scale-150">
-                   <Icons.Waves size={48} />
+             <div className="absolute inset-0 flex items-center justify-center text-stone-300 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+                <div className="relative z-10 text-amber-700/80">
+                  <Icons.Ship size={72} strokeWidth={1} />
                 </div>
              </div>
              
-             {/* Badge Text */}
-             <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 px-3 py-1 rounded-full border border-slate-700 text-[10px] text-amber-500 font-mono tracking-widest shadow-xl">
-               Since 2023
-             </div>
-          </div>
-
-          {/* Team Name */}
-          <h1 className="text-5xl md:text-7xl font-fantasy font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-stone-200 to-stone-500 drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] tracking-tight pb-2 mb-2">
-            원양어선
-          </h1>
-          
-          {/* Subtitle / Infinity */}
-          <div className="flex items-center gap-3 text-slate-400 mb-6">
-            <span className="h-px w-8 bg-slate-700" />
-            <Icons.Infinity size={18} className="opacity-50" />
-            <span className="text-sm md:text-base font-serif italic tracking-wider text-slate-500">
-              Character Database
-            </span>
-            <Icons.Infinity size={18} className="opacity-50" />
-            <span className="h-px w-8 bg-slate-700" />
-          </div>
-
-          {/* Members List */}
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 max-w-md text-center">
-             {['피쉬', '델리', '망령', '배추', '승훈', '유자'].map((member, idx) => (
-               <div key={member} className="flex items-center gap-2 text-slate-500 text-xs md:text-sm font-serif">
-                  <span className={`hover:text-amber-400 transition-colors cursor-default ${idx % 2 === 0 ? 'text-slate-400' : 'text-slate-500'}`}>{member}</span>
-                  {idx < 5 && <span className="opacity-30 text-[10px]">|</span>}
-               </div>
-             ))}
+             {/* Rings */}
+             <div className="absolute inset-0 rounded-full border border-stone-800 opacity-50" />
+             <div className="absolute inset-[-4px] rounded-full border border-dashed border-stone-800/50 animate-[spin_60s_linear_infinite]" />
           </div>
         </div>
       </header>
 
       {/* Grid */}
       <div className="flex-1 flex items-start justify-center pb-20 z-10 animate-in fade-in duration-1000 delay-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 w-full max-w-7xl px-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 w-full max-w-6xl px-4">
           {campaigns.map((campaign) => (
             <button
               key={campaign.id}
               onClick={() => onSelectCampaign(campaign.id)}
-              className="group relative flex flex-col w-full h-72 rounded-xl overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl"
+              className="group relative flex flex-col w-full h-64 bg-[#1c1917] rounded-sm overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl border border-stone-800 hover:border-amber-700/50"
             >
-              {/* Card Glass Background */}
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md border border-white/5 group-hover:border-white/10 group-hover:bg-slate-800/70 transition-all duration-300" />
+              {/* Card Texture / Glow */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               
-              {/* Inner Glow */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
-
               {/* Content Layout */}
-              <div className="relative z-10 h-full flex flex-col items-center justify-center p-6 text-center">
+              <div className="relative z-10 h-full flex flex-row items-center p-6 text-left gap-6">
                 
-                {/* Logo with Glow */}
-                <div className="relative mb-6 group-hover:scale-105 transition-transform duration-500 ease-out">
-                   <div className="w-28 h-28 rounded-full p-1 bg-gradient-to-br from-white/10 to-transparent shadow-2xl">
-                     <div className="w-full h-full rounded-full overflow-hidden bg-black/80 relative ring-1 ring-white/10">
+                {/* Logo Area */}
+                <div className="relative shrink-0">
+                   <div className="w-24 h-24 rounded-full p-0.5 bg-gradient-to-b from-stone-700 to-stone-900 shadow-xl group-hover:shadow-amber-900/20 transition-all duration-500">
+                     <div className="w-full h-full rounded-full overflow-hidden bg-[#0c0a09] relative flex items-center justify-center">
                         {campaign.logoUrl ? (
                           <img 
                             src={campaign.logoUrl} 
                             alt={campaign.name} 
-                            className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" 
+                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-300 grayscale group-hover:grayscale-0" 
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-900 text-slate-600">
-                            <Icons.Folder size={32} strokeWidth={1.5} />
-                          </div>
+                          <Icons.Folder size={32} strokeWidth={1} className="text-stone-700 group-hover:text-amber-700 transition-colors" />
                         )}
                      </div>
                    </div>
                 </div>
 
-                {/* Typography */}
-                <div className="w-full space-y-1">
-                  <h2 className="text-xl md:text-2xl font-bold text-slate-200 font-serif break-keep leading-tight transition-all duration-300 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:via-amber-100 group-hover:to-amber-500">
+                {/* Typography Area */}
+                <div className="flex-1 flex flex-col justify-center border-l border-stone-800 pl-6 h-3/4 group-hover:border-amber-900/30 transition-colors">
+                  <h2 className="text-xl md:text-2xl font-serif font-bold text-stone-300 break-keep leading-snug mb-2 group-hover:text-amber-500 transition-colors duration-300">
                     {campaign.name}
                   </h2>
-                  <p className="text-[10px] md:text-xs text-slate-500 font-mono uppercase tracking-[0.15em] line-clamp-1 group-hover:text-amber-400/80 transition-colors">
+                  <p className="text-[11px] text-stone-600 font-mono uppercase tracking-widest line-clamp-1 group-hover:text-amber-700/80 transition-colors">
                     {campaign.subTitle || 'Unknown Chronicle'}
                   </p>
+                  <div className="mt-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+                     <span className="text-[10px] text-stone-500 font-sans border border-stone-700 px-2 py-0.5 rounded-full">
+                       {campaign.system}
+                     </span>
+                  </div>
                 </div>
+              </div>
+
+              {/* Decorative Corner */}
+              <div className="absolute top-2 right-2 text-stone-800 group-hover:text-amber-900/40 transition-colors duration-500">
+                <Icons.Clover size={12} />
               </div>
             </button>
           ))}
           
-          {/* Create New Campaign Card - Modernized */}
+          {/* Create New Campaign Card - Simple & Clean */}
           <button
              onClick={onOpenSettings}
-             className="group relative flex flex-col items-center justify-center w-full h-72 rounded-xl overflow-hidden border border-slate-800 hover:border-amber-900/50 bg-slate-900/30 hover:bg-slate-800/50 backdrop-blur-sm transition-all duration-300 gap-4"
+             className="group relative flex flex-col items-center justify-center w-full h-64 rounded-sm border border-dashed border-stone-800 hover:border-amber-700/50 bg-transparent hover:bg-stone-900/30 transition-all duration-300 gap-3"
           >
-             <div className="w-16 h-16 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-slate-600 group-hover:text-amber-100 group-hover:scale-110 group-hover:bg-amber-900/50 group-hover:border-amber-700 transition-all duration-300 shadow-xl">
-                <Icons.Plus size={24} />
+             <div className="w-12 h-12 rounded-full border border-stone-800 flex items-center justify-center text-stone-600 group-hover:text-amber-500 group-hover:border-amber-500/50 transition-all duration-300">
+                <Icons.Plus size={20} />
              </div>
-             <span className="text-xs font-bold text-slate-500 group-hover:text-amber-500 uppercase tracking-widest transition-colors">
-               Start New Journey
+             <span className="text-xs font-serif font-bold text-stone-600 group-hover:text-amber-600 tracking-widest transition-colors">
+               Create New World
              </span>
           </button>
         </div>
       </div>
       
-      {/* Minimal Footer */}
-      <footer className="absolute bottom-6 left-0 w-full text-center pointer-events-none">
-        <div className="flex items-center justify-center gap-2 opacity-30 text-[10px] text-slate-400 font-mono tracking-widest">
-          <Icons.Anchor size={12} />
+      {/* Footer */}
+      <footer className="absolute bottom-4 left-0 w-full text-center pointer-events-none">
+        <div className="flex items-center justify-center gap-3 opacity-20 text-[10px] text-stone-500 font-mono tracking-[0.2em]">
           <span>RPG TEAM</span>
-          <span className="w-1 h-1 bg-current rounded-full" />
+          <span className="w-px h-3 bg-stone-700" />
           <span>EST. 2023</span>
         </div>
       </footer>

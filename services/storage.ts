@@ -172,7 +172,7 @@ export const loadFullState = async (): Promise<AppState> => {
         dndClass: c.dnd_class || undefined,
         dndSubclass: c.dnd_subclass || undefined,
         cpredRole: c.cpred_role || undefined,
-        cpredOrigin: c.cpred_origin || undefined,
+        cpred_origin: c.cpred_origin || undefined,
         customClass: c.custom_class || undefined,
         customSubclass: c.custom_subclass || undefined,
         extraFiles: myFiles,
@@ -329,8 +329,9 @@ export const deleteComment = async (id: string) => {
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    if (file.size > 5 * 1024 * 1024) {
-      reject(new Error("이미지 파일 크기는 5MB 이하여야 합니다."));
+    // Increase limit to 20MB
+    if (file.size > 20 * 1024 * 1024) {
+      reject(new Error("이미지 파일 크기는 20MB 이하여야 합니다."));
       return;
     }
     const reader = new FileReader();

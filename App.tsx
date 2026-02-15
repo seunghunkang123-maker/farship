@@ -268,7 +268,7 @@ const App: React.FC = () => {
     });
   };
 
-  // 글로벌 설정 (배경 등)
+  // 글로벌 설정 (배경 등) - 기능은 유지하되 UI에서 제거됨
   const updateGlobalBackgrounds = async (bgs: string[]) => {
     if (!data) return;
     try {
@@ -292,16 +292,11 @@ const App: React.FC = () => {
     ? data.characters.find(c => c.id === activeCharacterId)
     : null;
 
-  const currentBackgrounds = (activeCampaign && activeCampaign.backgroundImages.length > 0)
-    ? activeCampaign.backgroundImages
-    : data.globalBackgrounds;
-
   // Determine Theme
   const activeTheme = activeCampaign?.theme ? THEMES[activeCampaign.theme] : THEMES[THEME_KEYS.ADVENTURE];
 
   return (
     <Layout 
-      backgrounds={currentBackgrounds}
       themeClasses={activeCampaign ? activeTheme.classes : undefined}
     >
       {currentView === 'HOME' && (
