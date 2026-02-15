@@ -21,6 +21,7 @@ export interface CharacterComment {
   userName: string;
   content: string;
   styleVariant: 'NOTE' | 'STAMP' | 'WARNING' | 'MEMO'; // UI style
+  font?: string; // New: Custom font selection ('HAND', 'SERIF', 'MONO', 'SANS', 'BOLD')
   createdAt: number;
 }
 

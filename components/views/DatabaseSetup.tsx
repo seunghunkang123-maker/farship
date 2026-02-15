@@ -76,6 +76,7 @@ create table if not exists character_comments (
   user_name text not null,
   content text not null,
   style_variant text default 'NOTE',
+  font text, -- New font column
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -104,21 +105,30 @@ create policy "Public Access Comments" on character_comments for all using (true
 `;
 
 const UPDATE_SQL = `
--- 1. 야전교범 스타일 코멘트 테이블 추가
+-- 1. 야전교범 스타일 코멘트 테이블 추가 (없을 경우)
 create table if not exists character_comments (
   id uuid primary key default uuid_generate_v4(),
   character_id uuid references characters(id) on delete cascade,
   user_name text not null,
   content text not null,
   style_variant text default 'NOTE',
+  font text,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- 2. font 컬럼 추가 (이미 테이블이 있는 경우)
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_name='character_comments' and column_name='font') then
+    alter table character_comments add column font text;
+  end if;
+end $$;
 
 alter table character_comments enable row level security;
 drop policy if exists "Public Access Comments" on character_comments;
 create policy "Public Access Comments" on character_comments for all using (true) with check (true);
 
--- 2. 기존 캠페인 테마 기본값 설정 (NULL -> ADVENTURE)
+-- 3. 기존 캠페인 테마 기본값 설정 (NULL -> ADVENTURE)
 UPDATE campaigns SET theme = 'ADVENTURE' WHERE theme IS NULL;
 `;
 
@@ -162,13 +172,13 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
 
           <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
              <h3 className="text-amber-400 font-bold mb-2 flex justify-between items-center">
-              <span>2. 기존 데이터 유지 + 업데이트 (댓글/테마)</span>
+              <span>2. 기존 데이터 유지 + 업데이트 (댓글/폰트/테마)</span>
               <button onClick={() => copySql(UPDATE_SQL)} className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded transition-colors">
                 복사하기
               </button>
             </h3>
             <p className="text-xs text-slate-400 mb-2">
-              이미 사이트를 사용 중이라면 이 쿼리를 실행하여 'character_comments' 테이블을 추가하고 테마 기본값을 설정하세요.
+              이미 사이트를 사용 중이라면 이 쿼리를 실행하여 테이블을 최신화하세요.
             </p>
             <pre className="text-xs text-slate-400 overflow-auto max-h-20 custom-scrollbar p-2 bg-black/30 rounded">
               {UPDATE_SQL}

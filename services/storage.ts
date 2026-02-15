@@ -47,6 +47,7 @@ interface DbComment {
   user_name: string;
   content: string;
   style_variant: string;
+  font: string | null; // Added
   created_at: string;
 }
 
@@ -142,6 +143,7 @@ export const loadFullState = async (): Promise<AppState> => {
           userName: cmt.user_name,
           content: cmt.content,
           styleVariant: (cmt.style_variant as any) || 'NOTE',
+          font: cmt.font || undefined,
           createdAt: new Date(cmt.created_at).getTime()
         }));
 
@@ -307,6 +309,7 @@ export const addComment = async (comment: CharacterComment) => {
     user_name: comment.userName,
     content: comment.content,
     style_variant: comment.styleVariant,
+    font: toDbValue(comment.font),
     created_at: new Date(comment.createdAt).toISOString()
   };
   
