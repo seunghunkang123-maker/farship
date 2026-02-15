@@ -16,7 +16,12 @@ import {
   RefreshCw,
   Lock,
   MoreVertical,
-  Palette
+  Palette,
+  Ship,
+  Anchor,
+  Clover,
+  Infinity as InfinityIcon,
+  Waves
 } from 'lucide-react';
 
 export const Icons = {
@@ -37,5 +42,10 @@ export const Icons = {
   Refresh: RefreshCw,
   Lock,
   Menu: MoreVertical,
-  Palette
+  Palette,
+  Ship,
+  Anchor,
+  Clover,
+  Infinity: InfinityIcon,
+  Waves
 };

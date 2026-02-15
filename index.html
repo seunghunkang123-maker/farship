@@ -5,38 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>원양어선 캐릭터 데이터베이스</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@300;400;500;700;900&family=Nanum+Myeongjo:wght@400;700;800&family=Nanum+Gothic+Coding:wght@400;700&family=Do+Hyeon&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=Nanum+Gothic+Coding:wght@400;700&family=Nanum+Pen+Script&family=Noto+Serif+KR:wght@300;400;600;900&display=swap" rel="stylesheet">
     <style>
+      /* 기본 설정: IBM Plex Sans KR (모던하고 깔끔함) */
       body {
-        font-family: 'Noto Sans KR', sans-serif;
-        background-color: #0f172a; /* Slate 900 */
-        color: #e2e8f0; /* Slate 200 */
+        font-family: 'IBM Plex Sans KR', sans-serif;
+        background-color: #0f172a;
+        color: #e2e8f0;
       }
-      .font-hand { font-family: 'Nanum Pen Script', cursive; }
-      .font-display { font-family: 'Black Han Sans', sans-serif; }
-      .font-serif { font-family: 'Nanum Myeongjo', serif; }
-      .font-mono { font-family: 'Nanum Gothic Coding', monospace; }
-      .font-bold-display { font-family: 'Do Hyeon', sans-serif; }
+
+      /* 폰트 유틸리티 클래스 */
+      .font-sans { font-family: 'IBM Plex Sans KR', sans-serif; }
+      .font-serif { font-family: 'Noto Serif KR', serif; } /* 진지하고 고전적 */
+      .font-fantasy { font-family: 'Gowun Batang', serif; } /* 판타지/동화적 */
+      .font-mono { font-family: 'Nanum Gothic Coding', monospace; } /* 기계적/코딩 */
+      .font-hand { font-family: 'Nanum Pen Script', cursive; } /* 손글씨 */
       
-      /* Custom Scrollbar */
+      /* 세련된 스크롤바 */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #1e293b; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1); 
+        border-radius: 10px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+        background: rgba(255, 255, 255, 0.3); 
       }
+
+      /* Glassmorphism 유틸리티 */
       .glass-panel {
-        background: rgba(15, 23, 42, 0.85);
-        backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
     </style>
   <script type="importmap">
