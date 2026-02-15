@@ -1,5 +1,5 @@
 
-import { AppState, Campaign, Character, CharacterComment, ExtraFile, SystemType } from '../types';
+import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType } from '../types';
 import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
 
@@ -9,7 +9,7 @@ interface DbCharacter {
   campaign_id: string;
   name: string;
   real_name: string | null;
-  player_name: string | null; // Added
+  player_name: string | null; 
   is_npc: boolean;
   image_url: string | null;
   image_fit: 'cover' | 'contain';
@@ -30,6 +30,9 @@ interface DbCharacter {
   cpred_origin: string | null;
   custom_class: string | null;
   custom_subclass: string | null;
+  
+  secret_profile: SecretProfile | null; // Added: JSONB column
+
   updated_at: number;
 }
 
@@ -49,7 +52,7 @@ interface DbComment {
   user_name: string;
   content: string;
   style_variant: string;
-  font: string | null; // Added
+  font: string | null;
   created_at: string;
 }
 
@@ -61,7 +64,7 @@ interface DbCampaign {
   logo_url: string | null;
   background_images: string[] | null;
   description: string | null;
-  theme: string | null; // Added
+  theme: string | null;
 }
 
 // Helper: UUID 검증
@@ -99,7 +102,6 @@ export const loadFullState = async (): Promise<AppState> => {
       .from('extra_files')
       .select('*');
 
-    // Load Comments (new)
     const { data: commentData, error: commentError } = await supabase
       .from('character_comments')
       .select('*');
@@ -108,7 +110,6 @@ export const loadFullState = async (): Promise<AppState> => {
     if (campError) console.error('Campaign Error:', campError);
     if (charError) console.error('Character Error:', charError);
     if (fileError) console.error('File Error:', fileError);
-    // Ignore comment table missing error for backward compatibility
     if (commentError && commentError.code !== '42P01') console.error('Comment Error:', commentError);
 
     const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
@@ -154,7 +155,7 @@ export const loadFullState = async (): Promise<AppState> => {
         campaignId: c.campaign_id,
         name: c.name,
         realName: c.real_name || undefined,
-        playerName: c.player_name || undefined, // Mapped
+        playerName: c.player_name || undefined,
         isNpc: c.is_npc,
         imageUrl: c.image_url || undefined,
         imageFit: c.image_fit,
@@ -171,10 +172,13 @@ export const loadFullState = async (): Promise<AppState> => {
 
         dndClass: c.dnd_class || undefined,
         dndSubclass: c.dnd_subclass || undefined,
-        cpredRole: c.cpred_role || undefined,
+        cpred_role: c.cpred_role || undefined,
         cpred_origin: c.cpred_origin || undefined,
         customClass: c.custom_class || undefined,
         customSubclass: c.custom_subclass || undefined,
+        
+        secretProfile: c.secret_profile || undefined, // Mapped
+
         extraFiles: myFiles,
         comments: myComments,
         updatedAt: c.updated_at
@@ -254,7 +258,7 @@ export const saveCharacter = async (char: Character) => {
     campaign_id: char.campaignId,
     name: char.name,
     real_name: toDbValue(char.realName),
-    player_name: toDbValue(char.playerName), // Mapped
+    player_name: toDbValue(char.playerName),
     is_npc: char.isNpc,
     image_url: toDbValue(char.imageUrl),
     image_fit: char.imageFit,
@@ -275,6 +279,9 @@ export const saveCharacter = async (char: Character) => {
     cpred_origin: toDbValue(char.cpredOrigin),
     custom_class: toDbValue(char.customClass),
     custom_subclass: toDbValue(char.customSubclass),
+    
+    secret_profile: toDbValue(char.secretProfile), // Save JSONB
+
     updated_at: char.updatedAt
   };
 

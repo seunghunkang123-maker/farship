@@ -153,18 +153,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                            </label>
                         </div>
                         <div className="flex-1">
+                          <label className="text-xs font-bold text-stone-500 block mb-1 uppercase tracking-wider">부제 (Subtitle)</label>
+                          <input 
+                            value={selectedCampaign.subTitle || ''}
+                            onChange={(e) => onUpdateCampaign({...selectedCampaign, subTitle: e.target.value})}
+                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-300 focus:outline-none focus:border-amber-500 mb-4 font-mono text-sm"
+                          />
+                          
                           <label className="text-xs font-bold text-amber-600 block mb-1 uppercase tracking-wider">세계 설정 (World Setting)</label>
                           <input 
                             value={selectedCampaign.name}
                             onChange={(e) => onUpdateCampaign({...selectedCampaign, name: e.target.value})}
-                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-200 focus:outline-none focus:border-amber-500 mb-4 transition-colors font-serif text-lg"
+                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-200 focus:outline-none focus:border-amber-500 transition-colors font-serif text-lg"
                           />
-                           <label className="text-xs font-bold text-stone-500 block mb-1 uppercase tracking-wider">부제 (Subtitle)</label>
-                          <input 
-                            value={selectedCampaign.subTitle || ''}
-                            onChange={(e) => onUpdateCampaign({...selectedCampaign, subTitle: e.target.value})}
-                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-300 focus:outline-none focus:border-amber-500 font-mono text-sm"
-                          />
+                          
                           <p className="text-xs text-stone-600 mt-4 flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-stone-600" />
                             시스템: <span className="text-stone-400 font-mono">{selectedCampaign.system}</span>

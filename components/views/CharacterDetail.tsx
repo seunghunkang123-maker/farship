@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS } from '../../types';
+import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile } from '../../types';
 import { Icons } from '../ui/Icons';
 import { fileToBase64 } from '../../services/storage';
 import { THEMES, THEME_KEYS } from '../../constants';
@@ -28,6 +28,7 @@ interface EditableFieldProps {
   placeholder?: string;
   isSecretField?: boolean;
   themeClasses: any; // Add theme classes
+  highlight?: boolean;
 }
 
 const EditableField: React.FC<EditableFieldProps> = ({
@@ -39,9 +40,11 @@ const EditableField: React.FC<EditableFieldProps> = ({
   options = [],
   placeholder = '',
   isSecretField = false,
-  themeClasses
+  themeClasses,
+  highlight = false
 }) => {
   const [isRevealed, setIsRevealed] = useState(false);
+  const displayClass = highlight ? 'text-amber-400 font-bold' : themeClasses.textMain;
 
   if (!isEditing) {
     if (type === 'toggle') return null;
@@ -72,7 +75,7 @@ const EditableField: React.FC<EditableFieldProps> = ({
         <label className={`text-xs font-bold uppercase tracking-wider mb-1 block ${themeClasses.textSub}`}>
           {label}
         </label>
-        <div className={`text-sm md:text-base p-2 rounded min-h-[2rem] whitespace-pre-wrap ${themeClasses.textMain}`}>
+        <div className={`text-sm md:text-base p-2 rounded min-h-[2rem] whitespace-pre-wrap ${displayClass}`}>
           {type === 'select'
             ? options.find((o) => o.value === value)?.label || value
             : displayValue}
@@ -83,15 +86,15 @@ const EditableField: React.FC<EditableFieldProps> = ({
 
   return (
     <div className="mb-4">
-      <label className={`text-xs font-bold uppercase tracking-wider mb-1 block ${themeClasses.textAccent}`}>
-        {label}
+      <label className={`text-xs font-bold uppercase tracking-wider mb-1 block ${highlight ? 'text-amber-500' : themeClasses.textAccent}`}>
+        {label} {highlight && <span className="text-[10px] bg-amber-900/50 px-1 rounded ml-1">Secret</span>}
       </label>
       {type === 'text' && (
         <input
           type="text"
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          className={`w-full bg-black/20 border ${themeClasses.border} rounded p-2 focus:border-opacity-100 focus:outline-none placeholder:opacity-30 ${themeClasses.textMain}`}
+          className={`w-full bg-black/20 border ${highlight ? 'border-amber-700 focus:border-amber-500' : themeClasses.border} rounded p-2 focus:border-opacity-100 focus:outline-none placeholder:opacity-30 ${themeClasses.textMain}`}
           placeholder={placeholder}
         />
       )}
@@ -99,7 +102,7 @@ const EditableField: React.FC<EditableFieldProps> = ({
         <textarea
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          className={`w-full h-32 bg-black/20 border ${themeClasses.border} rounded p-2 focus:border-opacity-100 focus:outline-none resize-none placeholder:opacity-30 ${themeClasses.textMain}`}
+          className={`w-full h-32 bg-black/20 border ${highlight ? 'border-amber-700 focus:border-amber-500' : themeClasses.border} rounded p-2 focus:border-opacity-100 focus:outline-none resize-none placeholder:opacity-30 ${themeClasses.textMain}`}
           placeholder={placeholder}
         />
       )}
@@ -159,12 +162,16 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const [activeTab, setActiveTab] = useState<'INFO' | 'BIO' | 'FILES' | 'COMMENTS'>('INFO');
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   
+  // Secret / Reveal Mode
+  const [isSecretRevealed, setIsSecretRevealed] = useState(false);
+  const [editLayer, setEditLayer] = useState<'PUBLIC' | 'SECRET'>('PUBLIC');
+
   // Comment State
   const [commentName, setCommentName] = useState('관찰자');
   const [commentText, setCommentText] = useState('');
   const [commentStyle, setCommentStyle] = useState<'NOTE'|'STAMP'|'WARNING'|'MEMO'>('NOTE');
-  const [commentFont, setCommentFont] = useState<string>('HAND'); // Default font
-  const [commentDate, setCommentDate] = useState<string>(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
+  const [commentFont, setCommentFont] = useState<string>('HAND');
+  const [commentDate, setCommentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   // Player Selection State
   const [isGuestPlayer, setIsGuestPlayer] = useState(false);
@@ -197,6 +204,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       // Check if existing player is a member or guest
       const isMember = CORE_MEMBERS.includes(character.playerName || '');
       setIsGuestPlayer(!isMember && !!character.playerName);
+      setIsSecretRevealed(false);
+      setEditLayer('PUBLIC');
     } else {
       // Initialize new character
       setFormData({
@@ -220,13 +229,19 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       setIsEditing(true);
       setRevealedIds(new Set());
       setIsGuestPlayer(false);
+      setIsSecretRevealed(false);
+      setEditLayer('PUBLIC');
     }
   }, [character, campaign]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetLayer: 'PUBLIC' | 'SECRET') => {
     if (e.target.files && e.target.files[0]) {
       const base64 = await fileToBase64(e.target.files[0]);
-      setFormData(prev => ({ ...prev, imageUrl: base64 }));
+      if (targetLayer === 'PUBLIC') {
+        setFormData(prev => ({ ...prev, imageUrl: base64 }));
+      } else {
+        updateSecretField('image_url', base64);
+      }
     }
   };
 
@@ -235,10 +250,44 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       alert("이름을 입력해주세요.");
       return;
     }
-    // If Guest mode is off, ensure dropdown value is used. If on, input value is used.
-    // Logic is handled by the onChange events, just need to make sure consistency.
+    // Clean up secret profile if empty
+    if (formData.secretProfile && Object.keys(formData.secretProfile).length === 0) {
+       setFormData(prev => ({ ...prev, secretProfile: undefined }));
+    }
     onSave({ ...formData, updatedAt: Date.now() });
     setIsEditing(false);
+    setIsSecretRevealed(false);
+  };
+
+  // Helper: Secret Profile Updater
+  const updateSecretField = (field: keyof SecretProfile, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      secretProfile: {
+        ...(prev.secretProfile || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  // Helper: Get Resolved Value (Public vs Secret)
+  // If editing, return based on editLayer.
+  // If viewing, return based on isSecretRevealed, falling back to public if secret is empty.
+  const resolveValue = (field: keyof Character, secretField: keyof SecretProfile): string => {
+    if (isEditing) {
+      if (editLayer === 'SECRET') {
+         // @ts-ignore
+         return (formData.secretProfile?.[secretField] as string) || '';
+      }
+      return (formData[field] as string) || '';
+    } else {
+      if (isSecretRevealed) {
+         // @ts-ignore
+         const secretVal = formData.secretProfile?.[secretField] as string | undefined;
+         return (secretVal && secretVal.trim() !== '') ? secretVal : ((formData[field] as string) || '');
+      }
+      return (formData[field] as string) || '';
+    }
   };
 
   // Helper functions for ExtraFiles
@@ -291,8 +340,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const submitComment = () => {
     if (!commentText.trim()) return;
     if (!onAddComment) return;
-
-    // Use selected date or fallback to now
     const selectedTime = commentDate ? new Date(commentDate).getTime() : Date.now();
 
     const newComment: CharacterComment = {
@@ -321,13 +368,27 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   else if (campaign.system === SystemType.CYBERPUNK_RED) displayRole = formData.cpredRole || '';
   else displayRole = formData.customClass || '';
 
+  // Determine active portrait
   const activePortraitFile = useMemo(() => {
     const candidates = formData.extraFiles.filter(f => f.useAsPortrait && f.imageUrl);
     const reversed = [...candidates].reverse();
     return reversed.find(f => !f.isSecret || revealedIds.has(f.id));
   }, [formData.extraFiles, revealedIds]);
 
-  const displayImageUrl = activePortraitFile ? activePortraitFile.imageUrl : formData.imageUrl;
+  // Main Image Resolution:
+  // 1. ExtraFile override (Highest priority if active)
+  // 2. Secret Profile Image (If revealed or editing secret)
+  // 3. Public Image
+  let displayImageUrl = formData.imageUrl;
+  
+  if (isEditing) {
+    if (editLayer === 'SECRET') displayImageUrl = formData.secretProfile?.image_url || formData.imageUrl; // Show secret placeholder if exists, or public as base
+  } else {
+    if (isSecretRevealed && formData.secretProfile?.image_url) displayImageUrl = formData.secretProfile.image_url;
+  }
+  
+  if (activePortraitFile) displayImageUrl = activePortraitFile.imageUrl;
+
 
   // System Specific Labels
   let nameLabel = '이름';
@@ -348,12 +409,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     levelPlaceholder = '예: 베테랑, EXP 3';
   }
 
-  // Helper for Member Badge Style in Detail View
-  const isCoreMember = CORE_MEMBERS.includes(formData.playerName || '');
+  // --- Render Helpers ---
+  const hasSecretProfile = formData.secretProfile && Object.keys(formData.secretProfile).length > 0;
   
   return (
     <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 md:p-6 animate-in fade-in duration-200">
-      <div className={`w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-xl shadow-2xl border flex flex-col md:flex-row overflow-hidden transition-colors duration-500 ${tc.bgMain} ${tc.border} ${tc.font || ''}`}>
+      <div className={`w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-xl shadow-2xl border flex flex-col md:flex-row overflow-hidden transition-colors duration-500 ${tc.bgMain} ${isSecretRevealed ? 'border-amber-600 shadow-amber-900/50' : tc.border} ${tc.font || ''}`}>
         
         {/* Left Column: Visuals */}
         <div className={`w-full md:w-1/3 p-6 flex flex-col border-r overflow-y-auto transition-colors duration-500 ${tc.bgPanel} ${tc.border}`}>
@@ -368,7 +429,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             </div>
           </div>
 
-          <div className={`relative aspect-square w-full rounded-lg overflow-hidden mb-6 group transition-all duration-300 border-2 shadow-lg ${tc.border} bg-black/20`}>
+          <div className={`relative aspect-square w-full rounded-lg overflow-hidden mb-6 group transition-all duration-300 border-2 shadow-lg ${isSecretRevealed ? 'border-amber-500 shadow-amber-900/40' : tc.border} bg-black/20`}>
             {displayImageUrl ? (
               <img 
                 src={displayImageUrl} 
@@ -379,6 +440,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
               <div className={`w-full h-full flex items-center justify-center opacity-30 ${tc.textSub}`}><Icons.User size={80} /></div>
             )}
             
+            {/* Image Upload Overlay (Conditional) */}
             {isEditing && (
                <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white">
                  {activePortraitFile ? (
@@ -390,8 +452,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                  ) : (
                    <>
                      <Icons.Upload size={32} className="mb-2" />
-                     <span className="text-xs">기본 이미지 변경</span>
-                     <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                     <span className="text-xs">{editLayer === 'SECRET' ? '비밀(진상) 이미지 변경' : '기본 이미지 변경'}</span>
+                     <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, editLayer)} />
                    </>
                  )}
                </label>
@@ -412,13 +474,15 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           )}
 
           <div className="text-center">
-             <h2 className={`text-2xl font-black mb-1 break-keep leading-tight ${tc.textMain}`}>{formData.name || (isEditing ? '이름 없음' : '')}</h2>
+             {/* Name Display */}
+             <h2 className={`text-2xl font-black mb-1 break-keep leading-tight ${isSecretRevealed ? 'text-amber-500' : tc.textMain}`}>
+                {resolveValue('name', 'name') || (isEditing ? (editLayer === 'SECRET' ? '(비밀 이름 미설정)' : '이름 없음') : '')}
+             </h2>
              
-             {/* Player Name Display (상세 화면 - 이름 밑) */}
+             {/* Player Name Display */}
              {!isEditing && formData.playerName && (
                 <div className="flex items-center justify-center gap-2 mb-3">
                    {(() => {
-                      // Apply member color if exists, else default guest color
                       const badgeStyle = MEMBER_COLORS[formData.playerName] || GUEST_COLOR;
                       return (
                         <span className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 ${badgeStyle}`}>
@@ -429,12 +493,22 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                    })()}
                 </div>
              )}
-
-             {!isEditing && campaign.system === SystemType.CYBERPUNK_RED && formData.realName && (
-               <div className="mb-2">
-                 <span className={`text-xs mr-2 ${tc.textSub}`}>실명:</span> 
-                 <span className={`text-sm blur-sm hover:blur-0 cursor-pointer transition-all duration-300 ${tc.textSub}`} title="클릭하여 확인">{formData.realName}</span>
-               </div>
+             
+             {/* Reveal Button (View Mode) */}
+             {!isEditing && hasSecretProfile && (
+                <div className="flex justify-center my-4">
+                   <button 
+                      onClick={() => setIsSecretRevealed(!isSecretRevealed)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 shadow-xl ${
+                        isSecretRevealed 
+                          ? 'bg-amber-950 text-amber-500 border-amber-600 shadow-amber-900/40' 
+                          : 'bg-black/40 text-stone-500 border-stone-800 hover:text-stone-300'
+                      }`}
+                   >
+                      {isSecretRevealed ? <Icons.Lock size={16} className="text-amber-500" /> : <Icons.Lock size={16} />}
+                      <span className="text-xs font-bold tracking-widest">{isSecretRevealed ? 'TRUTH REVEALED' : 'REVEAL TRUTH'}</span>
+                   </button>
+                </div>
              )}
 
              <div className="flex items-center justify-center gap-2 mb-4 mt-2">
@@ -450,47 +524,56 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                   </span>
                 )}
              </div>
+             
+             {/* Summary Field */}
              {isEditing ? (
                <input 
-                 className={`w-full bg-transparent border-b text-center text-sm pb-2 focus:border-opacity-100 outline-none ${tc.textSub} ${tc.border}`}
-                 placeholder="한 줄 요약 입력"
-                 value={formData.summary}
-                 onChange={e => setFormData(p => ({...p, summary: e.target.value}))}
+                 className={`w-full bg-transparent border-b text-center text-sm pb-2 focus:border-opacity-100 outline-none ${editLayer === 'SECRET' ? 'border-amber-600 text-amber-400 placeholder:text-amber-900' : `${tc.textSub} ${tc.border}`}`}
+                 placeholder={editLayer === 'SECRET' ? "비밀(진상) 요약" : "한 줄 요약 입력"}
+                 value={editLayer === 'SECRET' ? (formData.secretProfile?.summary || '') : formData.summary}
+                 onChange={e => {
+                    const val = e.target.value;
+                    if(editLayer === 'SECRET') updateSecretField('summary', val);
+                    else setFormData(p => ({...p, summary: val}));
+                 }}
                />
              ) : (
-               <p className={`text-sm italic opacity-80 ${tc.textSub}`}>"{formData.summary}"</p>
+               <p className={`text-sm italic opacity-80 ${isSecretRevealed ? 'text-amber-400' : tc.textSub}`}>
+                 "{resolveValue('summary', 'summary')}"
+               </p>
              )}
           </div>
         </div>
 
-        {/* Right Column: Details (File View) */}
+        {/* Right Column: Details */}
         <div className={`flex-1 flex flex-col relative bg-transparent`}>
           {/* Desktop Toolbar */}
           <div className={`hidden md:flex justify-between items-center p-4 border-b ${tc.border} ${tc.bgPanel}`}>
              <div className="flex gap-1">
-               <button 
-                 onClick={() => setActiveTab('INFO')} 
-                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'INFO' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}
-               >기본 정보</button>
-               <button 
-                 onClick={() => setActiveTab('BIO')} 
-                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'BIO' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}
-               >프로필/서사</button>
-               <button 
-                 onClick={() => setActiveTab('FILES')} 
-                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'FILES' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}
-               >
-                 추가 파일
-                 {formData.extraFiles.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.extraFiles.length}</span>}
-               </button>
-               <button 
-                 onClick={() => setActiveTab('COMMENTS')} 
-                 className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'COMMENTS' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}
-               >
-                 면담/기록
-                 {formData.comments && formData.comments.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.comments.length}</span>}
-               </button>
+               <button onClick={() => setActiveTab('INFO')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'INFO' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}>기본 정보</button>
+               <button onClick={() => setActiveTab('BIO')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'BIO' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}>프로필/서사</button>
+               <button onClick={() => setActiveTab('FILES')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'FILES' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}>추가 파일{formData.extraFiles.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.extraFiles.length}</span>}</button>
+               <button onClick={() => setActiveTab('COMMENTS')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'COMMENTS' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}>면담/기록{formData.comments && formData.comments.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.comments.length}</span>}</button>
              </div>
+             
+             {/* Edit Layer Toggle (Only in Edit Mode) */}
+             {isEditing && (
+                <div className="flex items-center bg-black/40 rounded-lg p-1 mr-4 border border-stone-700">
+                   <button 
+                     onClick={() => setEditLayer('PUBLIC')}
+                     className={`px-3 py-1 text-xs font-bold rounded transition-colors ${editLayer === 'PUBLIC' ? 'bg-stone-700 text-white' : 'text-stone-500 hover:text-stone-300'}`}
+                   >
+                     공개 정보
+                   </button>
+                   <button 
+                     onClick={() => setEditLayer('SECRET')}
+                     className={`px-3 py-1 text-xs font-bold rounded transition-colors flex items-center gap-1 ${editLayer === 'SECRET' ? 'bg-amber-800 text-amber-100' : 'text-stone-500 hover:text-amber-500'}`}
+                   >
+                     <Icons.Lock size={10} /> 비밀 정보
+                   </button>
+                </div>
+             )}
+
              <div className="flex items-center gap-2">
                {isEditing ? (
                  <>
@@ -507,16 +590,40 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar relative">
+            
+            {/* Secret Mode Overlay Indicator */}
+            {isEditing && editLayer === 'SECRET' && (
+               <div className="absolute top-0 left-0 w-full h-1 bg-amber-600 shadow-[0_0_10px_#d97706] z-10" />
+            )}
+
             {activeTab === 'INFO' && (
               <div className="space-y-6 max-w-2xl animate-in slide-in-from-bottom-2 duration-300">
-                 <EditableField label={nameLabel} value={formData.name} onChange={(v) => setFormData(p => ({...p, name: v}))} isEditing={isEditing} placeholder={campaign.system === SystemType.CYBERPUNK_RED ? '핸들' : '이름'} themeClasses={tc} />
+                 
+                 <EditableField 
+                    label={nameLabel} 
+                    value={editLayer === 'SECRET' ? (formData.secretProfile?.name || '') : formData.name} 
+                    onChange={(v) => editLayer === 'SECRET' ? updateSecretField('name', v) : setFormData(p => ({...p, name: v}))} 
+                    isEditing={isEditing} 
+                    placeholder={campaign.system === SystemType.CYBERPUNK_RED ? '핸들' : '이름'} 
+                    themeClasses={tc}
+                    highlight={isEditing && editLayer === 'SECRET'}
+                 />
                  
                  {(isEditing || campaign.system === SystemType.CYBERPUNK_RED || formData.realName) && (
-                   <EditableField label={realNameLabel} value={formData.realName} onChange={(v) => setFormData(p => ({...p, realName: v}))} isEditing={isEditing} placeholder="실제 이름" isSecretField={campaign.system === SystemType.CYBERPUNK_RED} themeClasses={tc} />
+                   <EditableField 
+                      label={realNameLabel} 
+                      value={editLayer === 'SECRET' ? (formData.secretProfile?.realName || '') : formData.realName} 
+                      onChange={(v) => editLayer === 'SECRET' ? updateSecretField('realName', v) : setFormData(p => ({...p, realName: v}))} 
+                      isEditing={isEditing} 
+                      placeholder="실제 이름" 
+                      isSecretField={campaign.system === SystemType.CYBERPUNK_RED} 
+                      themeClasses={tc}
+                      highlight={isEditing && editLayer === 'SECRET'} 
+                   />
                  )}
 
-                 {/* Player Selection Area - 우측 상세 정보 항목 */}
+                 {/* Player Selection Area - 우측 상세 정보 항목 (공통) */}
                  <div className="mb-4">
                     <label className={`text-xs font-bold uppercase tracking-wider mb-1 block ${isEditing ? tc.textAccent : tc.textSub}`}>
                        플레이어 (Player)
@@ -567,22 +674,35 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
                  <EditableField label="유형" value={formData.isNpc} onChange={(v) => setFormData(p => ({...p, isNpc: v}))} type="toggle" isEditing={isEditing} themeClasses={tc} />
                  <EditableField label={levelLabel} value={formData.levelOrExp} onChange={(v) => setFormData(p => ({...p, levelOrExp: v}))} placeholder={levelPlaceholder} isEditing={isEditing} themeClasses={tc} />
+                 
                  <div className="grid grid-cols-2 gap-4">
-                   <EditableField label="나이" value={formData.age} onChange={(v) => setFormData(p => ({...p, age: v}))} placeholder="예: 25세" isEditing={isEditing} themeClasses={tc} />
-                   <EditableField label="성별" value={formData.gender} onChange={(v) => setFormData(p => ({...p, gender: v}))} placeholder="예: 남성" isEditing={isEditing} themeClasses={tc} />
-                   <EditableField label="신장" value={formData.height} onChange={(v) => setFormData(p => ({...p, height: v}))} placeholder="예: 175cm" isEditing={isEditing} themeClasses={tc} />
-                   <EditableField label="체중" value={formData.weight} onChange={(v) => setFormData(p => ({...p, weight: v}))} placeholder="예: 70kg" isEditing={isEditing} themeClasses={tc} />
+                   <EditableField label="나이" value={resolveValue('age', 'age')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('age', v) : setFormData(p => ({...p, age: v}))} placeholder="예: 25세" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
+                   <EditableField label="성별" value={resolveValue('gender', 'gender')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('gender', v) : setFormData(p => ({...p, gender: v}))} placeholder="예: 남성" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
+                   <EditableField label="신장" value={resolveValue('height', 'height')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('height', v) : setFormData(p => ({...p, height: v}))} placeholder="예: 175cm" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
+                   <EditableField label="체중" value={resolveValue('weight', 'weight')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('weight', v) : setFormData(p => ({...p, weight: v}))} placeholder="예: 70kg" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
                  </div>
-                 <EditableField label="외모 묘사" value={formData.appearance} onChange={(v) => setFormData(p => ({...p, appearance: v}))} placeholder="특징" type="textarea" isEditing={isEditing} themeClasses={tc} />
+                 
+                 <EditableField label="외모 묘사" value={resolveValue('appearance', 'appearance')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} placeholder="특징" type="textarea" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
+                 
                  <hr className={`my-4 border-dashed opacity-50 ${tc.border}`} />
+                 
+                 {/* System Fields - usually not secret, keep as common */}
                  {campaign.system === SystemType.DND5E && <><EditableField label="클래스" value={formData.dndClass} onChange={(v) => setFormData(p => ({...p, dndClass: v}))} type="select" options={DND_CLASSES} isEditing={isEditing} themeClasses={tc} /><EditableField label="서브클래스" value={formData.dndSubclass} onChange={(v) => setFormData(p => ({...p, dndSubclass: v}))} placeholder="서브클래스" isEditing={isEditing} themeClasses={tc} /></>}
-                 {/* ... Other system fields logic same as before ... */}
               </div>
             )}
             
             {activeTab === 'BIO' && (
                <div className="h-full flex flex-col animate-in slide-in-from-bottom-2 duration-300">
-                  <EditableField label="상세 서사 / 메모" value={formData.description} onChange={(v) => setFormData(p => ({...p, description: v}))} type="textarea" placeholder="상세 내용" isEditing={isEditing} themeClasses={tc} />
+                  <EditableField 
+                     label="상세 서사 / 메모" 
+                     value={resolveValue('description', 'description')} 
+                     onChange={(v) => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} 
+                     type="textarea" 
+                     placeholder="상세 내용" 
+                     isEditing={isEditing} 
+                     themeClasses={tc}
+                     highlight={isEditing && editLayer === 'SECRET'}
+                  />
                </div>
             )}
 

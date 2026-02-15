@@ -28,6 +28,20 @@ export interface CharacterComment {
   createdAt: number;
 }
 
+// New: Secret Profile Structure
+export interface SecretProfile {
+  name?: string;
+  image_url?: string;
+  summary?: string;
+  description?: string;
+  age?: string;
+  gender?: string;
+  height?: string;
+  weight?: string;
+  appearance?: string;
+  realName?: string;
+}
+
 export interface Character {
   id: string;
   campaignId: string;
@@ -64,6 +78,10 @@ export interface Character {
   // Common Extra Fields
   extraFiles: ExtraFile[];
   comments: CharacterComment[]; // Added Comments
+  
+  // New: Secret Profile Object (Hidden by default)
+  secretProfile?: SecretProfile;
+
   updatedAt: number;
 }
 
