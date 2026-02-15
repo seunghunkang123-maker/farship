@@ -41,8 +41,13 @@ interface DbCampaign {
   description: string | null;
 }
 
-// Helper: UUID 검증 (DB 오류 방지)
+// Helper: UUID 검증
 const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+// Helper: undefined -> null 변환 (DB 저장용)
+const toDbValue = <T>(value: T | undefined): T | null => {
+  return value === undefined ? null : value;
+};
 
 // --- 전체 상태 로딩 ---
 
@@ -51,7 +56,7 @@ export const loadFullState = async (): Promise<AppState> => {
     const { data: settingsData, error: settingsError } = await supabase
       .from('settings')
       .select('*')
-      .single();
+      .maybeSingle(); // single() 대신 maybeSingle() 사용하여 0개 row일 때 에러 방지
     
     const { data: campaignsData, error: campError } = await supabase
       .from('campaigns')
@@ -114,8 +119,14 @@ export const loadFullState = async (): Promise<AppState> => {
       };
     });
 
+    // DB가 비어있으면 초기 상태 반환하되, 초기 상태의 ID가 DB에 없을 수 있으므로 주의 필요
+    // 하지만 읽기 전용으로 시작하므로 괜찮음.
+    if (campaigns.length === 0 && (!settingsData || !settingsData.password)) {
+       return INITIAL_STATE;
+    }
+
     return {
-      campaigns: campaigns.length > 0 ? campaigns : INITIAL_STATE.campaigns,
+      campaigns: campaigns,
       characters: characters,
       globalBackgrounds: settingsData?.global_backgrounds || INITIAL_STATE.globalBackgrounds,
       password: settingsData?.password || INITIAL_STATE.password
@@ -133,30 +144,33 @@ export const saveSettings = async (password: string, globalBackgrounds: string[]
   const { data } = await supabase.from('settings').select('id').limit(1);
   
   if (data && data.length > 0) {
-    await supabase.from('settings').update({
+    const { error } = await supabase.from('settings').update({
       password,
       global_backgrounds: globalBackgrounds
     }).eq('id', data[0].id);
+    if (error) throw error;
   } else {
-    await supabase.from('settings').insert({
+    const { error } = await supabase.from('settings').insert({
       password,
       global_backgrounds: globalBackgrounds
     });
+    if (error) throw error;
   }
 };
 
 export const saveCampaign = async (campaign: Campaign) => {
-  // UUID가 아닌 경우(레거시 데이터) 저장 건너뛰기
-  if (!isUuid(campaign.id)) return;
+  if (!isUuid(campaign.id)) {
+    throw new Error(`Invalid Campaign ID: ${campaign.id}`);
+  }
 
   const dbCamp = {
     id: campaign.id,
     name: campaign.name,
-    sub_title: campaign.subTitle,
+    sub_title: toDbValue(campaign.subTitle),
     system: campaign.system,
-    logo_url: campaign.logoUrl,
+    logo_url: toDbValue(campaign.logoUrl),
     background_images: campaign.backgroundImages,
-    description: campaign.description
+    description: toDbValue(campaign.description)
   };
 
   const { error } = await supabase.from('campaigns').upsert(dbCamp);
@@ -164,52 +178,39 @@ export const saveCampaign = async (campaign: Campaign) => {
 };
 
 export const deleteCampaign = async (id: string) => {
-  // 1. UUID 검증: 로컬 더미 데이터라면 DB 요청 없이 종료 (성공 처리)
+  // 로컬 초기 데이터(Initial State)라서 DB에 없는 경우를 대비해 에러 무시하지 않음
+  // 다만 UUID 형식이 아니면 DB 호출 방지
   if (!isUuid(id)) return;
 
-  // 2. 수동 Cascade: 하위 데이터를 명시적으로 먼저 삭제 (DB 제약조건 오류 방지)
-  try {
-    // 캠페인에 속한 캐릭터 ID 조회
-    const { data: chars } = await supabase.from('characters').select('id').eq('campaign_id', id);
-    
-    if (chars && chars.length > 0) {
-      const charIds = chars.map(c => c.id);
-      
-      // 캐릭터에 속한 추가 파일 삭제
-      await supabase.from('extra_files').delete().in('character_id', charIds);
-      
-      // 캐릭터 삭제
-      await supabase.from('characters').delete().eq('campaign_id', id);
-    }
-  } catch (e) {
-    console.warn("Cascade delete warning:", e);
-    // 계속 진행 (DB 레벨 Cascade가 있을 수 있음)
-  }
-
-  // 3. 캠페인 삭제
+  // ON DELETE CASCADE가 설정되어 있으므로 campaigns만 삭제하면 characters, extra_files 모두 자동 삭제됨.
+  // 복잡한 수동 삭제 로직을 제거하여 트랜잭션 오류 및 권한 오류 방지.
   const { error } = await supabase.from('campaigns').delete().eq('id', id);
+  
   if (error) throw error;
 };
 
 export const saveCharacter = async (char: Character) => {
-  if (!isUuid(char.id)) return;
+  if (!isUuid(char.id)) {
+    throw new Error(`Invalid Character ID: ${char.id}`);
+  }
 
   // 1. 캐릭터 기본 정보 저장
+  // undefined 값을 null로 변환하여 DB에 명시적으로 필드를 비우도록 함
   const dbChar = {
     id: char.id,
     campaign_id: char.campaignId,
     name: char.name,
     is_npc: char.isNpc,
-    image_url: char.imageUrl,
+    image_url: toDbValue(char.imageUrl),
     image_fit: char.imageFit,
-    summary: char.summary,
-    description: char.description,
-    dnd_class: char.dndClass,
-    dnd_subclass: char.dndSubclass,
-    cpred_role: char.cpredRole,
-    cpred_origin: char.cpredOrigin,
-    custom_class: char.customClass,
-    custom_subclass: char.customSubclass,
+    summary: toDbValue(char.summary),
+    description: toDbValue(char.description),
+    dnd_class: toDbValue(char.dndClass),
+    dnd_subclass: toDbValue(char.dndSubclass),
+    cpred_role: toDbValue(char.cpredRole),
+    cpred_origin: toDbValue(char.cpredOrigin),
+    custom_class: toDbValue(char.customClass),
+    custom_subclass: toDbValue(char.customSubclass),
     updated_at: char.updatedAt
   };
 
@@ -217,15 +218,17 @@ export const saveCharacter = async (char: Character) => {
   if (charError) throw charError;
 
   // 2. 추가 파일 처리
-  await supabase.from('extra_files').delete().eq('character_id', char.id);
+  // 기존 파일 삭제 후 재등록
+  const { error: deleteError } = await supabase.from('extra_files').delete().eq('character_id', char.id);
+  if (deleteError) throw deleteError;
 
   if (char.extraFiles.length > 0) {
     const dbFiles = char.extraFiles.map(f => ({
-      id: isUuid(f.id) ? f.id : crypto.randomUUID(), // 파일 ID도 UUID 보장
+      id: isUuid(f.id) ? f.id : crypto.randomUUID(),
       character_id: char.id,
       title: f.title,
-      content: f.content,
-      image_url: f.imageUrl,
+      content: toDbValue(f.content),
+      image_url: toDbValue(f.imageUrl),
       use_as_portrait: f.useAsPortrait,
       is_secret: f.isSecret
     }));
@@ -238,15 +241,19 @@ export const saveCharacter = async (char: Character) => {
 export const deleteCharacter = async (id: string) => {
   if (!isUuid(id)) return;
 
-  // 수동 Cascade: 파일 먼저 삭제
-  await supabase.from('extra_files').delete().eq('character_id', id);
-
+  // ON DELETE CASCADE가 설정되어 있으므로 캐릭터만 삭제하면 파일도 자동 삭제됨
   const { error } = await supabase.from('characters').delete().eq('id', id);
   if (error) throw error;
 };
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
+    // 5MB 용량 제한 체크 (Supabase 및 HTTP 요청 크기 제한 고려)
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error("이미지 파일 크기는 5MB 이하여야 합니다."));
+      return;
+    }
+
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => resolve(reader.result as string);

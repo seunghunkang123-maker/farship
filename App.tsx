@@ -53,6 +53,13 @@ const App: React.FC = () => {
   }
 
   // --- 액션 핸들러 ---
+  
+  // 에러 헬퍼
+  const handleError = (e: any, defaultMsg: string) => {
+    console.error(e);
+    const msg = e instanceof Error ? e.message : JSON.stringify(e);
+    alert(`${defaultMsg}\n\n상세 에러: ${msg}`);
+  };
 
   // 네비게이션
   const goToCampaign = (id: string) => {
@@ -87,8 +94,7 @@ const App: React.FC = () => {
       setActiveCharacterId(null);
       setIsCreatingCharacter(false);
     } catch (e) {
-      alert("저장 중 오류가 발생했습니다.");
-      console.error(e);
+      handleError(e, "캐릭터 저장 중 오류가 발생했습니다.");
     }
   };
 
@@ -106,8 +112,7 @@ const App: React.FC = () => {
           setActiveCharacterId(null);
           setIsCreatingCharacter(false);
         } catch (e) {
-          alert("삭제 중 오류가 발생했습니다.");
-          console.error(e);
+          handleError(e, "캐릭터 삭제 중 오류가 발생했습니다.");
         }
       }
     });
@@ -122,8 +127,7 @@ const App: React.FC = () => {
         campaigns: prev.campaigns.map(c => c.id === updated.id ? updated : c)
       }) : null);
     } catch (e) {
-      console.error(e);
-      alert("캠페인 업데이트 실패");
+      handleError(e, "캠페인 업데이트 실패");
     }
   };
 
@@ -135,8 +139,7 @@ const App: React.FC = () => {
         campaigns: [...prev.campaigns, newCamp]
       }) : null);
     } catch (e) {
-      console.error(e);
-      alert("캠페인 생성 실패");
+      handleError(e, "캠페인 생성 실패");
     }
   };
 
@@ -154,8 +157,7 @@ const App: React.FC = () => {
           }) : null);
           if (activeCampaignId === id) goHome();
         } catch (e) {
-          console.error(e);
-          alert("삭제 실패");
+          handleError(e, "캠페인 삭제 실패");
         }
       }
     });
@@ -168,8 +170,7 @@ const App: React.FC = () => {
       await dbSaveSettings(data.password, bgs);
       setData(prev => prev ? ({ ...prev, globalBackgrounds: bgs }) : null);
     } catch (e) {
-      console.error(e);
-      alert("설정 저장 실패");
+      handleError(e, "설정 저장 실패");
     }
   };
 
