@@ -1,0 +1,39 @@
+import { 
+  Settings, 
+  Plus, 
+  Trash2, 
+  Search, 
+  ChevronLeft, 
+  FileText, 
+  User, 
+  Users, 
+  Image as ImageIcon,
+  Save,
+  X,
+  Edit2,
+  FolderOpen,
+  Upload,
+  RefreshCw,
+  Lock,
+  MoreVertical
+} from 'lucide-react';
+
+export const Icons = {
+  Settings,
+  Plus,
+  Trash: Trash2,
+  Search,
+  Back: ChevronLeft,
+  File: FileText,
+  User,
+  Users, // for NPC
+  Image: ImageIcon,
+  Save,
+  Close: X,
+  Edit: Edit2,
+  Folder: FolderOpen,
+  Upload,
+  Refresh: RefreshCw,
+  Lock,
+  Menu: MoreVertical
+};

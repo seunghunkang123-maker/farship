@@ -1,0 +1,5 @@
+{
+  "name": "원양어선 캐릭터 데이터베이스",
+  "description": "다양한 TRPG 캠페인의 캐릭터 정보를 파일 형식으로 관리하고 열람할 수 있는 웹사이트입니다. 배경 이미지 순환, 비밀번호 보호, DnD/Cyberpunk 특화 필드를 지원합니다.",
+  "requestFramePermissions": []
+}
