@@ -82,10 +82,23 @@ const App: React.FC = () => {
   const handleError = (e: any, defaultMsg: string) => {
     console.error(e);
     const msg = e instanceof Error ? e.message : JSON.stringify(e);
-    
-    // 테이블 없음 에러 발생 시 초기화 화면으로 유도
-    if (msg.includes('relation') && msg.includes('does not exist') || msg.includes('not find the table')) {
-       setDbError(msg);
+    const code = (e as any)?.code;
+
+    // 테이블 또는 컬럼 없음 에러 발생 시 초기화 화면으로 유도
+    // PGRST204: Column not found (스키마 불일치)
+    // PGRST205: Relation not found
+    // 42P01: Undefined table
+    // 42703: Undefined column
+    if (
+      code === 'PGRST204' || 
+      code === 'PGRST205' || 
+      code === '42P01' || 
+      code === '42703' ||
+      msg.includes('does not exist') || 
+      msg.includes('not find the table') ||
+      msg.includes('not find the') // Matches "Could not find the 'font' column"
+    ) {
+       setDbError(`${defaultMsg}\n(데이터베이스 스키마 업데이트가 필요합니다. 아래 2번 업데이트 쿼리를 실행하세요)\n\n상세 에러: ${msg}`);
        return;
     }
 

@@ -102,10 +102,21 @@ create policy "Public Access ExtraFiles" on extra_files for all using (true) wit
 
 drop policy if exists "Public Access Comments" on character_comments;
 create policy "Public Access Comments" on character_comments for all using (true) with check (true);
+
+-- 스키마 캐시 리로드 (설치 직후 에러 방지)
+NOTIFY pgrst, 'reload config';
 `;
 
 const UPDATE_SQL = `
--- 1. 야전교범 스타일 코멘트 테이블 추가 (없을 경우)
+-- 1. campaigns 테이블에 theme 컬럼이 없으면 추가
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_name='campaigns' and column_name='theme') then
+    alter table campaigns add column theme text default 'ADVENTURE';
+  end if;
+end $$;
+
+-- 2. character_comments 테이블이 없으면 생성
 create table if not exists character_comments (
   id uuid primary key default uuid_generate_v4(),
   character_id uuid references characters(id) on delete cascade,
@@ -116,7 +127,7 @@ create table if not exists character_comments (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 2. font 컬럼 추가 (이미 테이블이 있는 경우)
+-- 3. character_comments 테이블에 font 컬럼이 없으면 추가 (테이블이 이미 있을 경우 대비)
 do $$
 begin
   if not exists (select 1 from information_schema.columns where table_name='character_comments' and column_name='font') then
@@ -124,12 +135,16 @@ begin
   end if;
 end $$;
 
+-- 4. 권한(RLS) 설정 업데이트
 alter table character_comments enable row level security;
 drop policy if exists "Public Access Comments" on character_comments;
 create policy "Public Access Comments" on character_comments for all using (true) with check (true);
 
--- 3. 기존 캠페인 테마 기본값 설정 (NULL -> ADVENTURE)
+-- 5. 기존 데이터 테마 기본값 채우기
 UPDATE campaigns SET theme = 'ADVENTURE' WHERE theme IS NULL;
+
+-- 6. 스키마 캐시 리로드 트리거 (필수: PGRST204 에러 방지)
+NOTIFY pgrst, 'reload config';
 `;
 
 interface Props {
@@ -152,7 +167,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
         </div>
         
         {errorMsg && (
-          <div className="bg-red-900/50 border border-red-800 p-3 rounded mb-6 text-sm font-mono text-red-200 break-all">
+          <div className="bg-red-900/50 border border-red-800 p-3 rounded mb-6 text-sm font-mono text-red-200 break-all whitespace-pre-wrap">
             {errorMsg}
           </div>
         )}
@@ -170,17 +185,17 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
             </pre>
           </div>
 
-          <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900 p-4 rounded-lg border border-slate-700 ring-2 ring-amber-500/50">
              <h3 className="text-amber-400 font-bold mb-2 flex justify-between items-center">
-              <span>2. 기존 데이터 유지 + 업데이트 (댓글/폰트/테마)</span>
+              <span>2. 기존 데이터 유지 + 업데이트 (오류 해결)</span>
               <button onClick={() => copySql(UPDATE_SQL)} className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded transition-colors">
                 복사하기
               </button>
             </h3>
-            <p className="text-xs text-slate-400 mb-2">
-              이미 사이트를 사용 중이라면 이 쿼리를 실행하여 테이블을 최신화하세요.
+            <p className="text-xs text-slate-400 mb-2 font-bold text-amber-200">
+              테마 저장 실패, PGRST204 에러가 발생한다면 이 쿼리를 실행하세요.
             </p>
-            <pre className="text-xs text-slate-400 overflow-auto max-h-20 custom-scrollbar p-2 bg-black/30 rounded">
+            <pre className="text-xs text-slate-400 overflow-auto max-h-40 custom-scrollbar p-2 bg-black/30 rounded">
               {UPDATE_SQL}
             </pre>
           </div>
@@ -190,7 +205,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
           <div className="text-sm text-slate-400 bg-slate-700/30 p-4 rounded border border-slate-700">
             <strong>진행 방법:</strong>
             <ol className="list-decimal list-inside mt-2 space-y-1">
-              <li>적절한 SQL(1번 또는 2번)을 <span className="text-blue-400">복사</span>하세요.</li>
+              <li>적절한 SQL(오류 해결 시 2번)을 <span className="text-blue-400">복사</span>하세요.</li>
               <li>Supabase 대시보드에서 <strong>SQL Editor</strong> 메뉴로 이동합니다.</li>
               <li>새 쿼리창에 붙여넣고 <strong>Run</strong>을 클릭하여 실행하세요.</li>
               <li>완료되면 아래 버튼을 눌러주세요.</li>
