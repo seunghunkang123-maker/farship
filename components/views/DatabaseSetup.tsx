@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Icons } from '../ui/Icons';
 
@@ -35,6 +36,7 @@ create table if not exists characters (
   campaign_id uuid references campaigns(id) on delete cascade,
   name text not null,
   real_name text,
+  player_name text, -- New Player Name Column
   is_npc boolean default false,
   image_url text,
   image_fit text default 'cover',
@@ -135,15 +137,59 @@ begin
   end if;
 end $$;
 
--- 4. 권한(RLS) 설정 업데이트
+-- 4. characters 테이블에 신규 컬럼들 일괄 추가 (player_name, bio fields, level_or_exp)
+do $$
+begin
+  -- Player Name
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='player_name') then
+    alter table characters add column player_name text;
+  end if;
+  
+  -- Real Name
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='real_name') then
+    alter table characters add column real_name text;
+  end if;
+
+  -- Level or Exp (이 부분이 누락되어 에러가 발생했음)
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='level_or_exp') then
+    alter table characters add column level_or_exp text;
+  end if;
+
+  -- Bio: Age
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='age') then
+    alter table characters add column age text;
+  end if;
+
+  -- Bio: Gender
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='gender') then
+    alter table characters add column gender text;
+  end if;
+
+  -- Bio: Height
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='height') then
+    alter table characters add column height text;
+  end if;
+
+  -- Bio: Weight
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='weight') then
+    alter table characters add column weight text;
+  end if;
+
+  -- Bio: Appearance
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='appearance') then
+    alter table characters add column appearance text;
+  end if;
+end $$;
+
+-- 5. 권한(RLS) 설정 업데이트
 alter table character_comments enable row level security;
 drop policy if exists "Public Access Comments" on character_comments;
 create policy "Public Access Comments" on character_comments for all using (true) with check (true);
 
--- 5. 기존 데이터 테마 기본값 채우기
+-- 6. 기존 데이터 테마 기본값 채우기
 UPDATE campaigns SET theme = 'ADVENTURE' WHERE theme IS NULL;
 
--- 6. 스키마 캐시 리로드 트리거 (필수: PGRST204 에러 방지)
+-- 7. 스키마 캐시 리로드 (필수: PGRST204 에러 방지)
 NOTIFY pgrst, 'reload config';
 `;
 
@@ -193,7 +239,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
               </button>
             </h3>
             <p className="text-xs text-slate-400 mb-2 font-bold text-amber-200">
-              테마 저장 실패, PGRST204 에러가 발생한다면 이 쿼리를 실행하세요.
+              새로운 기능(플레이어 표시 등)을 위해 DB 업데이트가 필요합니다.
             </p>
             <pre className="text-xs text-slate-400 overflow-auto max-h-40 custom-scrollbar p-2 bg-black/30 rounded">
               {UPDATE_SQL}

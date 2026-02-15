@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, deleteComment as dbDeleteComment } from './services/storage';
 import { AppState, Campaign, Character, CharacterComment } from './types';
@@ -66,12 +67,26 @@ const App: React.FC = () => {
     return <DatabaseSetup onRetry={init} errorMsg={dbError} />;
   }
 
-  // 로딩 중 표시
+  // 로딩 중 표시 (테마 적용)
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white gap-4">
-        <div className="animate-spin text-blue-500"><Icons.Refresh size={48} /></div>
-        <p className="text-slate-400">데이터베이스 동기화 중...</p>
+      <div className="min-h-screen bg-[#1c1917] flex flex-col items-center justify-center text-stone-200 gap-6 relative overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-900/20 via-stone-950/80 to-black pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="w-16 h-16 mb-4 text-amber-600 animate-pulse">
+             <Icons.Ship size={64} strokeWidth={1} />
+          </div>
+          <div className="flex items-center gap-3">
+             <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '0s' }} />
+             <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
+             <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '0.4s' }} />
+          </div>
+          <p className="mt-4 text-sm font-serif text-amber-500/80 tracking-widest uppercase">
+            Loading Archives...
+          </p>
+        </div>
       </div>
     );
   }

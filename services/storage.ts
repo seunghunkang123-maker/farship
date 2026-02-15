@@ -1,3 +1,4 @@
+
 import { AppState, Campaign, Character, CharacterComment, ExtraFile, SystemType } from '../types';
 import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
@@ -8,6 +9,7 @@ interface DbCharacter {
   campaign_id: string;
   name: string;
   real_name: string | null;
+  player_name: string | null; // Added
   is_npc: boolean;
   image_url: string | null;
   image_fit: 'cover' | 'contain';
@@ -152,6 +154,7 @@ export const loadFullState = async (): Promise<AppState> => {
         campaignId: c.campaign_id,
         name: c.name,
         realName: c.real_name || undefined,
+        playerName: c.player_name || undefined, // Mapped
         isNpc: c.is_npc,
         imageUrl: c.image_url || undefined,
         imageFit: c.image_fit,
@@ -251,6 +254,7 @@ export const saveCharacter = async (char: Character) => {
     campaign_id: char.campaignId,
     name: char.name,
     real_name: toDbValue(char.realName),
+    player_name: toDbValue(char.playerName), // Mapped
     is_npc: char.isNpc,
     image_url: toDbValue(char.imageUrl),
     image_fit: char.imageFit,

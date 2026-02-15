@@ -1,3 +1,4 @@
+
 export enum SystemType {
   DND5E = 'DND5E',
   CYBERPUNK_RED = 'CPRED',
@@ -5,6 +6,8 @@ export enum SystemType {
   BAND_OF_BLADES = 'BAND_OF_BLADES',
   OTHER = 'OTHER'
 }
+
+export const CORE_MEMBERS = ['피쉬', '델리', '망령', '배추', '승훈', '유자'];
 
 export interface ExtraFile {
   id: string;
@@ -30,6 +33,7 @@ export interface Character {
   campaignId: string;
   name: string; // Used as "Handle" in Cyberpunk
   realName?: string; // New: Real Name / Secret Identity
+  playerName?: string; // New: Player Name (Member or Guest)
   isNpc: boolean;
   imageUrl?: string; // Base64 or URL
   imageFit: 'cover' | 'contain';

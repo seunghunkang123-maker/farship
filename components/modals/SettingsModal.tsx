@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Campaign, SystemType } from '../../types';
 import { Icons } from '../ui/Icons';
@@ -70,43 +71,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-4xl max-h-[90vh] rounded-xl flex flex-col shadow-2xl">
-        <div className="flex justify-between items-center p-6 border-b border-slate-800">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Icons.Settings /> 환경 설정
+      {/* Stone-900 Background to match Adventure Theme */}
+      <div className="bg-[#1c1917] border border-stone-700 w-full max-w-4xl max-h-[90vh] rounded-xl flex flex-col shadow-2xl relative overflow-hidden">
+        {/* Decorative Overlay similar to Main Dashboard */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-transparent to-transparent pointer-events-none" />
+
+        <div className="flex justify-between items-center p-6 border-b border-stone-800 relative z-10">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-stone-200">
+            <Icons.Settings className="text-amber-600" /> 환경 설정
           </h2>
-          <button onClick={onClose}><Icons.Close /></button>
+          <button onClick={onClose} className="text-stone-400 hover:text-white"><Icons.Close /></button>
         </div>
 
-        <div className="flex border-b border-slate-800">
+        <div className="flex border-b border-stone-800 relative z-10">
           <button 
             onClick={() => setActiveTab('GLOBAL')}
-            className={`flex-1 py-3 text-sm font-bold ${activeTab === 'GLOBAL' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400'}`}
+            className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'GLOBAL' ? 'text-amber-500 border-b-2 border-amber-500 bg-white/5' : 'text-stone-500 hover:text-stone-300'}`}
           >메인 / 전체 설정</button>
           <button 
             onClick={() => setActiveTab('CAMPAIGN')}
-            className={`flex-1 py-3 text-sm font-bold ${activeTab === 'CAMPAIGN' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400'}`}
+            className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'CAMPAIGN' ? 'text-amber-500 border-b-2 border-amber-500 bg-white/5' : 'text-stone-500 hover:text-stone-300'}`}
           >캠페인 관리</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 relative z-10 custom-scrollbar">
           {activeTab === 'GLOBAL' && (
             <div className="space-y-8">
               <section>
-                <h3 className="text-sm font-bold text-slate-400 mb-4 uppercase">메인 배경 이미지 (순환)</h3>
+                <h3 className="text-sm font-bold text-amber-500/80 mb-4 uppercase tracking-wider flex items-center gap-2">
+                   <Icons.Image size={16} />
+                   메인 배경 이미지 (순환)
+                </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {globalBackgrounds.map((bg, idx) => (
-                    <div key={idx} className="relative aspect-video bg-slate-800 rounded overflow-hidden group border border-slate-700">
+                    <div key={idx} className="relative aspect-video bg-stone-800 rounded overflow-hidden group border border-stone-700 hover:border-amber-500/50 transition-colors shadow-lg">
                       <img src={bg} className="w-full h-full object-cover" alt="bg" />
                       <button 
                         onClick={() => removeGlobalBg(idx)}
-                        className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                       >
                         <Icons.Trash size={12} />
                       </button>
                     </div>
                   ))}
-                  <label className="flex flex-col items-center justify-center aspect-video border-2 border-dashed border-slate-700 hover:border-blue-500 rounded cursor-pointer transition-colors text-slate-500 hover:text-blue-500">
+                  <label className="flex flex-col items-center justify-center aspect-video border-2 border-dashed border-stone-700 hover:border-amber-500/50 bg-black/20 rounded cursor-pointer transition-colors text-stone-500 hover:text-amber-500">
                     <Icons.Upload size={24} className="mb-2" />
                     <span className="text-xs">이미지 추가</span>
                     <input type="file" accept="image/*" className="hidden" onChange={handleGlobalBgUpload} />
@@ -119,24 +127,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'CAMPAIGN' && (
             <div className="flex flex-col md:flex-row gap-6 h-full">
                {/* Sidebar List */}
-               <div className="w-full md:w-1/3 border-r border-slate-800 pr-0 md:pr-6 space-y-4">
+               <div className="w-full md:w-1/3 border-r border-stone-800 pr-0 md:pr-6 space-y-4">
                  <button 
                    onClick={() => setIsCreating(true)}
-                   className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-bold flex items-center justify-center gap-2"
+                   className="w-full py-2 bg-amber-700 hover:bg-amber-600 text-stone-100 rounded text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-amber-900/20 border border-amber-600/50 transition-colors"
                  >
                    <Icons.Plus size={16} /> 신규 캠페인
                  </button>
                  
                  {isCreating && (
-                   <div className="p-3 bg-slate-800 rounded border border-slate-700 animate-in fade-in slide-in-from-top-2">
+                   <div className="p-3 bg-stone-800 rounded border border-stone-600 animate-in fade-in slide-in-from-top-2 shadow-xl">
                      <input 
-                       className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm mb-2" 
+                       className="w-full bg-stone-900 border border-stone-600 rounded p-2 text-sm mb-2 text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-500" 
                        placeholder="캠페인 이름"
                        value={newCampName}
                        onChange={e => setNewCampName(e.target.value)}
                      />
                      <select 
-                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm mb-2"
+                        className="w-full bg-stone-900 border border-stone-600 rounded p-2 text-sm mb-2 text-stone-200 focus:outline-none focus:border-amber-500"
                         value={newCampSys}
                         onChange={e => setNewCampSys(e.target.value as SystemType)}
                      >
@@ -147,8 +155,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                        <option value={SystemType.OTHER}>기타 (자유 입력)</option>
                      </select>
                      <div className="flex justify-end gap-2">
-                       <button onClick={() => setIsCreating(false)} className="text-xs text-slate-400 hover:text-white">취소</button>
-                       <button onClick={createCampaign} className="text-xs text-blue-400 hover:text-blue-300 font-bold">생성</button>
+                       <button onClick={() => setIsCreating(false)} className="text-xs text-stone-500 hover:text-stone-300">취소</button>
+                       <button onClick={createCampaign} className="text-xs text-amber-500 hover:text-amber-400 font-bold">생성</button>
                      </div>
                    </div>
                  )}
@@ -161,11 +169,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                          setSelectedCampaignId(c.id);
                          setIsCreating(false);
                        }}
-                       className={`w-full text-left px-3 py-2 rounded text-sm truncate flex items-center gap-2 ${selectedCampaignId === c.id ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:bg-slate-800/50'}`}
+                       className={`w-full text-left px-3 py-2 rounded text-sm truncate flex items-center gap-2 transition-colors ${selectedCampaignId === c.id ? 'bg-stone-800 text-amber-400 font-bold border border-stone-700' : 'text-stone-500 hover:bg-stone-800/50 hover:text-stone-300'}`}
                      >
                        {c.logoUrl ? (
-                         <img src={c.logoUrl} className="w-6 h-6 rounded-full object-cover" />
-                       ) : <div className="w-6 h-6 rounded-full bg-slate-700" />}
+                         <img src={c.logoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-600" />
+                       ) : <div className="w-6 h-6 rounded-full bg-stone-800 border border-stone-700" />}
                        {c.name}
                      </button>
                    ))}
@@ -177,12 +185,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                  {selectedCampaign ? (
                    <div className="space-y-6">
                       <div className="flex items-start gap-4">
-                        <div className="relative w-24 h-24 rounded-full bg-slate-800 overflow-hidden border border-slate-600 flex-shrink-0 group">
+                        <div className="relative w-24 h-24 rounded-full bg-stone-800 overflow-hidden border border-stone-600 flex-shrink-0 group shadow-2xl">
                            {selectedCampaign.logoUrl ? (
                              <img src={selectedCampaign.logoUrl} className="w-full h-full object-cover" />
-                           ) : <Icons.Image className="w-full h-full p-6 text-slate-600" />}
+                           ) : <Icons.Image className="w-full h-full p-6 text-stone-700" />}
                            <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
-                             <Icons.Upload className="text-white" />
+                             <Icons.Upload className="text-amber-400" />
                              <input type="file" className="hidden" onChange={async (e) => {
                                 if(e.target.files?.[0]) {
                                   const url = await fileToBase64(e.target.files[0]);
@@ -192,35 +200,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                            </label>
                         </div>
                         <div className="flex-1">
-                          <label className="text-xs font-bold text-slate-500 block mb-1">캠페인 이름</label>
+                          <label className="text-xs font-bold text-amber-600 block mb-1 uppercase tracking-wider">세계 설정 (World Setting)</label>
                           <input 
                             value={selectedCampaign.name}
                             onChange={(e) => onUpdateCampaign({...selectedCampaign, name: e.target.value})}
-                            className="w-full bg-slate-800 border-b border-slate-600 p-2 text-white focus:outline-none focus:border-blue-500 mb-2"
+                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-200 focus:outline-none focus:border-amber-500 mb-4 transition-colors font-serif text-lg"
                           />
-                           <label className="text-xs font-bold text-slate-500 block mb-1">부제 (영어)</label>
+                           <label className="text-xs font-bold text-stone-500 block mb-1 uppercase tracking-wider">부제 (Subtitle)</label>
                           <input 
                             value={selectedCampaign.subTitle || ''}
                             onChange={(e) => onUpdateCampaign({...selectedCampaign, subTitle: e.target.value})}
-                            className="w-full bg-slate-800 border-b border-slate-600 p-2 text-white focus:outline-none focus:border-blue-500"
+                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-300 focus:outline-none focus:border-amber-500 font-mono text-sm"
                           />
-                          <p className="text-xs text-slate-600 mt-2">
-                            시스템: <span className="text-slate-400 font-mono">{selectedCampaign.system}</span>
+                          <p className="text-xs text-stone-600 mt-4 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-stone-600" />
+                            시스템: <span className="text-stone-400 font-mono">{selectedCampaign.system}</span>
                           </p>
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-800">
+                      <div className="pt-4 border-t border-stone-800">
                         <button 
                           onClick={() => onDeleteCampaign(selectedCampaign.id)}
-                          className="px-4 py-2 border border-red-900 text-red-500 hover:bg-red-900/20 rounded text-sm flex items-center gap-2"
+                          className="px-4 py-2 border border-red-900/50 text-red-500/70 hover:text-red-400 hover:bg-red-950/30 rounded text-sm flex items-center gap-2 transition-colors"
                         >
                           <Icons.Trash size={14} /> 캠페인 삭제 (암호 필요)
                         </button>
                       </div>
                    </div>
                  ) : (
-                   <div className="h-full flex items-center justify-center text-slate-600">캠페인을 선택하세요</div>
+                   <div className="h-full flex items-center justify-center text-stone-700 flex-col gap-2 opacity-50">
+                     <Icons.Settings size={48} />
+                     <span>설정할 캠페인을 선택하세요</span>
+                   </div>
                  )}
                </div>
             </div>

@@ -1,8 +1,20 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment } from '../../types';
+import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS } from '../../types';
 import { Icons } from '../ui/Icons';
 import { fileToBase64 } from '../../services/storage';
 import { THEMES, THEME_KEYS } from '../../constants';
+
+// --- Colors Constant (Duplicated from Dashboard for consistent look) ---
+const MEMBER_COLORS: Record<string, string> = {
+  '승훈': 'bg-red-900/90 text-red-100 border-red-500/50 shadow-[0_0_10px_rgba(220,38,38,0.3)]',
+  '피쉬': 'bg-blue-900/90 text-blue-100 border-blue-500/50 shadow-[0_0_10px_rgba(37,99,235,0.3)]',
+  '델리': 'bg-orange-900/90 text-orange-100 border-orange-500/50 shadow-[0_0_10px_rgba(234,88,12,0.3)]',
+  '망령': 'bg-violet-900/90 text-violet-100 border-violet-500/50 shadow-[0_0_10px_rgba(139,92,246,0.3)]',
+  '배추': 'bg-emerald-900/90 text-emerald-100 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]',
+  '유자': 'bg-yellow-900/90 text-yellow-100 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.3)]',
+};
+const GUEST_COLOR = 'bg-slate-800/90 text-slate-300 border-slate-600 backdrop-blur-sm';
 
 // --- Sub-components defined outside to prevent re-mount on render ---
 
@@ -153,6 +165,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const [commentStyle, setCommentStyle] = useState<'NOTE'|'STAMP'|'WARNING'|'MEMO'>('NOTE');
   const [commentFont, setCommentFont] = useState<string>('HAND'); // Default font
   const [commentDate, setCommentDate] = useState<string>(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
+  
+  // Player Selection State
+  const [isGuestPlayer, setIsGuestPlayer] = useState(false);
 
   // Theme Integration
   const currentThemeKey = campaign.theme || THEME_KEYS.ADVENTURE;
@@ -165,6 +180,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     campaignId: campaign.id,
     name: '',
     realName: '',
+    playerName: CORE_MEMBERS[0],
     isNpc: false,
     imageFit: 'cover',
     summary: '',
@@ -177,7 +193,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   useEffect(() => {
     if (character) {
       setFormData(character);
-      setRevealedIds(new Set()); // Reset revealed secrets on load
+      setRevealedIds(new Set()); 
+      // Check if existing player is a member or guest
+      const isMember = CORE_MEMBERS.includes(character.playerName || '');
+      setIsGuestPlayer(!isMember && !!character.playerName);
     } else {
       // Initialize new character
       setFormData({
@@ -185,6 +204,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         campaignId: campaign.id,
         name: '',
         realName: '',
+        playerName: CORE_MEMBERS[0],
         isNpc: false,
         imageFit: 'cover',
         summary: '',
@@ -199,6 +219,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       });
       setIsEditing(true);
       setRevealedIds(new Set());
+      setIsGuestPlayer(false);
     }
   }, [character, campaign]);
 
@@ -214,6 +235,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       alert("이름을 입력해주세요.");
       return;
     }
+    // If Guest mode is off, ensure dropdown value is used. If on, input value is used.
+    // Logic is handled by the onChange events, just need to make sure consistency.
     onSave({ ...formData, updatedAt: Date.now() });
     setIsEditing(false);
   };
@@ -324,6 +347,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     levelLabel = '등급 / 경험치';
     levelPlaceholder = '예: 베테랑, EXP 3';
   }
+
+  // Helper for Member Badge Style in Detail View
+  const isCoreMember = CORE_MEMBERS.includes(formData.playerName || '');
   
   return (
     <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 md:p-6 animate-in fade-in duration-200">
@@ -388,6 +414,22 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           <div className="text-center">
              <h2 className={`text-2xl font-black mb-1 break-keep leading-tight ${tc.textMain}`}>{formData.name || (isEditing ? '이름 없음' : '')}</h2>
              
+             {/* Player Name Display (상세 화면 - 이름 밑) */}
+             {!isEditing && formData.playerName && (
+                <div className="flex items-center justify-center gap-2 mb-3">
+                   {(() => {
+                      // Apply member color if exists, else default guest color
+                      const badgeStyle = MEMBER_COLORS[formData.playerName] || GUEST_COLOR;
+                      return (
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 ${badgeStyle}`}>
+                           <Icons.User size={10} fill="currentColor" />
+                           {formData.playerName}
+                        </span>
+                      );
+                   })()}
+                </div>
+             )}
+
              {!isEditing && campaign.system === SystemType.CYBERPUNK_RED && formData.realName && (
                <div className="mb-2">
                  <span className={`text-xs mr-2 ${tc.textSub}`}>실명:</span> 
@@ -469,9 +511,60 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'INFO' && (
               <div className="space-y-6 max-w-2xl animate-in slide-in-from-bottom-2 duration-300">
                  <EditableField label={nameLabel} value={formData.name} onChange={(v) => setFormData(p => ({...p, name: v}))} isEditing={isEditing} placeholder={campaign.system === SystemType.CYBERPUNK_RED ? '핸들' : '이름'} themeClasses={tc} />
+                 
                  {(isEditing || campaign.system === SystemType.CYBERPUNK_RED || formData.realName) && (
                    <EditableField label={realNameLabel} value={formData.realName} onChange={(v) => setFormData(p => ({...p, realName: v}))} isEditing={isEditing} placeholder="실제 이름" isSecretField={campaign.system === SystemType.CYBERPUNK_RED} themeClasses={tc} />
                  )}
+
+                 {/* Player Selection Area - 우측 상세 정보 항목 */}
+                 <div className="mb-4">
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-1 block ${isEditing ? tc.textAccent : tc.textSub}`}>
+                       플레이어 (Player)
+                    </label>
+                    {isEditing ? (
+                       <div className="space-y-2">
+                         <div className="flex items-center gap-2 mb-2">
+                            <button 
+                               onClick={() => { setIsGuestPlayer(false); setFormData(p => ({...p, playerName: CORE_MEMBERS[0]})); }}
+                               className={`px-3 py-1 text-xs rounded-full border transition-colors ${!isGuestPlayer ? 'bg-amber-600 border-amber-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                            >
+                               고정 멤버
+                            </button>
+                             <button 
+                               onClick={() => { setIsGuestPlayer(true); setFormData(p => ({...p, playerName: ''})); }}
+                               className={`px-3 py-1 text-xs rounded-full border transition-colors ${isGuestPlayer ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                            >
+                               게스트 (직접 입력)
+                            </button>
+                         </div>
+                         
+                         {!isGuestPlayer ? (
+                           <select
+                              value={formData.playerName || CORE_MEMBERS[0]}
+                              onChange={(e) => setFormData(p => ({...p, playerName: e.target.value}))}
+                              className={`w-full bg-black/20 border ${tc.border} rounded p-2 focus:border-opacity-100 focus:outline-none ${tc.textMain}`}
+                           >
+                              {CORE_MEMBERS.map(member => (
+                                 <option key={member} value={member} className="bg-slate-800 text-slate-200">{member}</option>
+                              ))}
+                           </select>
+                         ) : (
+                           <input
+                              type="text"
+                              value={formData.playerName || ''}
+                              onChange={(e) => setFormData(p => ({...p, playerName: e.target.value}))}
+                              className={`w-full bg-black/20 border ${tc.border} rounded p-2 focus:border-opacity-100 focus:outline-none placeholder:opacity-30 ${tc.textMain}`}
+                              placeholder="게스트 이름 입력"
+                           />
+                         )}
+                       </div>
+                    ) : (
+                       <div className={`text-sm md:text-base p-2 rounded min-h-[2rem] whitespace-pre-wrap ${tc.textMain}`}>
+                          {formData.playerName || '-'}
+                       </div>
+                    )}
+                 </div>
+
                  <EditableField label="유형" value={formData.isNpc} onChange={(v) => setFormData(p => ({...p, isNpc: v}))} type="toggle" isEditing={isEditing} themeClasses={tc} />
                  <EditableField label={levelLabel} value={formData.levelOrExp} onChange={(v) => setFormData(p => ({...p, levelOrExp: v}))} placeholder={levelPlaceholder} isEditing={isEditing} themeClasses={tc} />
                  <div className="grid grid-cols-2 gap-4">

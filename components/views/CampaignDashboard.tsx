@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo } from 'react';
-import { Campaign, Character, DND_CLASSES, SystemType } from '../../types';
+import { Campaign, Character, DND_CLASSES, SystemType, CORE_MEMBERS } from '../../types';
 import { Icons } from '../ui/Icons';
 import { THEMES, THEME_KEYS } from '../../constants';
 import { saveCampaign } from '../../services/storage';
@@ -12,6 +13,19 @@ interface CampaignDashboardProps {
   onAddCharacter: () => void;
   onOpenSettings: () => void;
 }
+
+// 멤버별 색상 매핑
+const MEMBER_COLORS: Record<string, string> = {
+  '승훈': 'bg-red-900/90 text-red-100 border-red-500/50 shadow-[0_0_10px_rgba(220,38,38,0.3)]', // 요청: 빨간색
+  '피쉬': 'bg-blue-900/90 text-blue-100 border-blue-500/50 shadow-[0_0_10px_rgba(37,99,235,0.3)]', // 물/파랑
+  '델리': 'bg-orange-900/90 text-orange-100 border-orange-500/50 shadow-[0_0_10px_rgba(234,88,12,0.3)]', // 델리/주황
+  '망령': 'bg-violet-900/90 text-violet-100 border-violet-500/50 shadow-[0_0_10px_rgba(139,92,246,0.3)]', // 영혼/보라
+  '배추': 'bg-emerald-900/90 text-emerald-100 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]', // 야채/초록
+  '유자': 'bg-yellow-900/90 text-yellow-100 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.3)]', // 유자/노랑
+};
+
+// 게스트(기본) 색상
+const GUEST_COLOR = 'bg-slate-800/90 text-slate-300 border-slate-600 backdrop-blur-sm';
 
 const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   campaign,
@@ -33,23 +47,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
   const handleThemeChange = async (newThemeKey: string) => {
     try {
-      // Optimistic update handled by parent usually, but here we trigger DB save
-      // Note: In a real app, you'd update parent state via prop callback.
-      // Since App.tsx holds state, we should ideally call onUpdateCampaign, 
-      // but for now we will just save to DB and force reload or assume user refreshes if needed.
-      // Better approach: We modify the campaign object in place visually or reload.
-      // To keep it simple without refactoring App.tsx completely, we'll save and 
-      // rely on the user navigating or 'App' state updates if passed down.
-      // *Correction*: We don't have updateCampaign prop here. We will just save and reload window 
-      // or better, if App passes an updater.
-      // Given constraints, I'll direct save and reload page or just change local visual if I could.
-      // Actually, let's just update the DB. The visual won't update until parent re-renders. 
-      // But wait! 'campaign' prop is from parent state. 
-      // To fix this proper: I'll accept that the visual update might need a refresh or 
-      // assume the user is okay with a quick blip.
-      // *Wait*, I can just reload the page for now to apply DB change if I can't update parent state.
-      // OR better: Just use local state override for immediate visual feedback.
-      
       await saveCampaign({ ...campaign, theme: newThemeKey });
       window.location.reload(); // Simple brute force to sync state for now.
     } catch (e) {
@@ -63,7 +60,8 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
     return characters
       .filter((c) => {
         const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              (c.customClass && c.customClass.toLowerCase().includes(searchTerm.toLowerCase()));
+                              (c.customClass && c.customClass.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                              (c.playerName && c.playerName.toLowerCase().includes(searchTerm.toLowerCase()));
         
         const matchesType = typeFilter === 'ALL' 
           ? true 
@@ -154,7 +152,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
           <Icons.Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${theme.classes.textSub}`} size={16} />
           <input 
             type="text"
-            placeholder="이름, 클래스 검색..."
+            placeholder="이름, 클래스, 플레이어 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={`w-full bg-transparent border rounded-full py-1.5 pl-10 pr-4 text-sm focus:outline-none transition-colors ${theme.classes.textMain} ${theme.classes.border} focus:border-opacity-100 placeholder:opacity-50`}
@@ -230,6 +228,14 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
                const activePortrait = char.extraFiles.find(f => f.useAsPortrait && f.imageUrl && !f.isSecret);
                const displayImg = activePortrait ? activePortrait.imageUrl : char.imageUrl;
+               
+               // 플레이어 이름표 스타일 결정 (멤버별 색상 vs 게스트)
+               let badgeStyle = GUEST_COLOR;
+               if (char.playerName) {
+                 if (MEMBER_COLORS[char.playerName]) {
+                   badgeStyle = MEMBER_COLORS[char.playerName];
+                 }
+               }
 
                return (
                 <div 
@@ -251,11 +257,23 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                       </div>
                     )}
                     
-                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                    {/* PC/NPC Tag - Top Left */}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
                       <span className={`px-2 py-0.5 text-[10px] font-bold rounded shadow-sm ${char.isNpc ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}>
                         {char.isNpc ? 'NPC' : 'PC'}
                       </span>
                     </div>
+
+                    {/* Player Name Badge - Top Right */}
+                    {char.playerName && (
+                       <div className="absolute top-2 right-2 z-10 max-w-[70%]">
+                          <span className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border truncate ${badgeStyle}`}>
+                             <Icons.User size={8} className="shrink-0" fill="currentColor" />
+                             <span className="truncate">{char.playerName}</span>
+                          </span>
+                       </div>
+                    )}
+
                     {char.extraFiles.length > 0 && (
                        <div className="absolute bottom-2 right-2">
                          <Icons.Folder size={16} className={`drop-shadow-md ${activePortrait ? 'text-yellow-400' : theme.classes.textSub}`} fill="currentColor" />
