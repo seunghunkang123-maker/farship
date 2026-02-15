@@ -85,59 +85,61 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
       {theme.classes.overlay && <div className={`absolute inset-0 pointer-events-none z-0 ${theme.classes.overlay}`} />}
       
       {/* Header Bar */}
-      <header className={`flex-none p-4 md:px-8 flex items-center justify-between backdrop-blur-md sticky top-0 z-20 border-b ${theme.classes.bgMain} ${theme.classes.border}`}>
-        <div className="flex items-center gap-4 relative z-30">
-          <button onClick={onBack} className={`p-2 rounded-full transition-colors ${theme.classes.buttonSecondary}`}>
-            <Icons.Back size={24} />
-          </button>
-          
-          {/* Theme Switcher */}
-          <div className="relative">
-            <button 
-              onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
-              className={`p-2 rounded-full transition-colors ${theme.classes.buttonSecondary}`}
-              title="테마 변경"
-            >
-              <Icons.Palette size={20} />
+      <header className={`flex-none p-4 md:px-8 flex flex-col md:flex-row items-start md:items-center justify-between backdrop-blur-md sticky top-0 z-20 border-b gap-4 md:gap-0 ${theme.classes.bgMain} ${theme.classes.border}`}>
+        <div className="flex items-center gap-4 relative z-30 w-full md:w-auto">
+          <div className="flex items-center gap-2">
+            <button onClick={onBack} className={`p-2 rounded-full transition-colors ${theme.classes.buttonSecondary}`}>
+              <Icons.Back size={24} />
             </button>
             
-            {isThemeMenuOpen && (
-              <div className="absolute top-full left-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                <div className="p-2 text-xs font-bold text-slate-500 uppercase">UI 테마 선택</div>
-                {Object.entries(THEMES).map(([key, config]) => (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      handleThemeChange(key);
-                      setIsThemeMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-800 transition-colors ${currentThemeKey === key ? 'text-blue-400 font-bold' : 'text-slate-300'}`}
-                  >
-                    {config.name}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Theme Switcher */}
+            <div className="relative">
+              <button 
+                onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+                className={`p-2 rounded-full transition-colors ${theme.classes.buttonSecondary}`}
+                title="테마 변경"
+              >
+                <Icons.Palette size={20} />
+              </button>
+              
+              {isThemeMenuOpen && (
+                <div className="absolute top-full left-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                  <div className="p-2 text-xs font-bold text-slate-500 uppercase">UI 테마 선택</div>
+                  {Object.entries(THEMES).map(([key, config]) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        handleThemeChange(key);
+                        setIsThemeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-800 transition-colors ${currentThemeKey === key ? 'text-blue-400 font-bold' : 'text-slate-300'}`}
+                    >
+                      {config.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 overflow-hidden">
              {campaign.logoUrl && (
-               <img src={campaign.logoUrl} alt="Logo" className={`w-10 h-10 rounded-full object-cover border ${theme.classes.border}`} />
+               <img src={campaign.logoUrl} alt="Logo" className={`w-8 h-8 md:w-10 md:h-10 rounded-full object-cover border flex-shrink-0 ${theme.classes.border}`} />
              )}
-             <div>
-               <h1 className={`text-xl font-bold leading-tight ${theme.classes.textMain}`}>{campaign.name}</h1>
-               {campaign.subTitle && <span className={`text-xs font-mono ${theme.classes.textSub}`}>{campaign.subTitle}</span>}
+             <div className="min-w-0">
+               <h1 className={`text-lg md:text-xl font-bold leading-tight truncate ${theme.classes.textMain}`}>{campaign.name}</h1>
+               {campaign.subTitle && <span className={`text-[10px] md:text-xs font-mono truncate block ${theme.classes.textSub}`}>{campaign.subTitle}</span>}
              </div>
           </div>
         </div>
         
-        <div className="flex items-center gap-2 relative z-30">
+        <div className="flex items-center justify-end gap-2 relative z-30 w-full md:w-auto">
           <button 
             onClick={onAddCharacter}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-lg ${theme.classes.buttonPrimary}`}
+            className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-colors shadow-lg ${theme.classes.buttonPrimary}`}
           >
             <Icons.Plus size={18} />
-            <span className="hidden md:inline">캐릭터 추가</span>
+            <span className="inline">캐릭터 추가</span>
           </button>
           <button onClick={onOpenSettings} className={`p-2 rounded-lg transition-colors ${theme.classes.buttonSecondary}`}>
             <Icons.Settings size={20} />
@@ -164,7 +166,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
            <select 
              value={typeFilter} 
              onChange={(e) => setTypeFilter(e.target.value as any)}
-             className={`bg-transparent border-none text-sm rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-opacity-50 ${theme.classes.textMain}`}
+             className={`bg-transparent border-none text-sm rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-opacity-50 ${theme.classes.textMain}`}
            >
              <option value="ALL" className="bg-slate-800 text-slate-200">전체 유형</option>
              <option value="PC" className="bg-slate-800 text-slate-200">PC (플레이어)</option>
@@ -175,7 +177,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
              <select 
                 value={classFilter} 
                 onChange={(e) => setClassFilter(e.target.value)}
-                className={`bg-transparent border-none text-sm rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-opacity-50 max-w-[150px] ${theme.classes.textMain}`}
+                className={`bg-transparent border-none text-sm rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-opacity-50 max-w-[120px] md:max-w-[150px] ${theme.classes.textMain}`}
              >
                <option value="ALL" className="bg-slate-800 text-slate-200">모든 클래스</option>
                {DND_CLASSES.map(cls => (
@@ -197,14 +199,14 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
       </div>
 
       {/* Character Grid */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 relative z-10">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 relative z-10 custom-scrollbar">
         {filteredChars.length === 0 ? (
           <div className={`h-full flex flex-col items-center justify-center opacity-60 ${theme.classes.textSub}`}>
             <Icons.Users size={48} className="mb-4" />
             <p>등록된 캐릭터가 없습니다.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
             {filteredChars.map((char) => {
                let subInfo = char.summary;
                
@@ -283,7 +285,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
                   {/* Info */}
                   <div className="p-3 flex flex-col gap-1 relative">
-                     <h3 className={`font-bold truncate transition-colors group-hover:opacity-80 ${theme.classes.textMain}`}>{char.name}</h3>
+                     <h3 className={`font-bold truncate transition-colors group-hover:opacity-80 text-sm md:text-base ${theme.classes.textMain}`}>{char.name}</h3>
                      <p className={`text-xs truncate min-h-[1rem] ${theme.classes.textSub}`}>
                        {subInfo || '-'}
                      </p>

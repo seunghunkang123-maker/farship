@@ -271,8 +271,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   };
 
   // Helper: Get Resolved Value (Public vs Secret)
-  // If editing, return based on editLayer.
-  // If viewing, return based on isSecretRevealed, falling back to public if secret is empty.
   const resolveValue = (field: keyof Character, secretField: keyof SecretProfile): string => {
     if (isEditing) {
       if (editLayer === 'SECRET') {
@@ -376,13 +374,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   }, [formData.extraFiles, revealedIds]);
 
   // Main Image Resolution:
-  // 1. ExtraFile override (Highest priority if active)
-  // 2. Secret Profile Image (If revealed or editing secret)
-  // 3. Public Image
   let displayImageUrl = formData.imageUrl;
   
   if (isEditing) {
-    if (editLayer === 'SECRET') displayImageUrl = formData.secretProfile?.image_url || formData.imageUrl; // Show secret placeholder if exists, or public as base
+    if (editLayer === 'SECRET') displayImageUrl = formData.secretProfile?.image_url || formData.imageUrl;
   } else {
     if (isSecretRevealed && formData.secretProfile?.image_url) displayImageUrl = formData.secretProfile.image_url;
   }
@@ -409,22 +404,24 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     levelPlaceholder = '예: 베테랑, EXP 3';
   }
 
-  // --- Render Helpers ---
   const hasSecretProfile = formData.secretProfile && Object.keys(formData.secretProfile).length > 0;
   
   return (
-    <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 md:p-6 animate-in fade-in duration-200">
-      <div className={`w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-xl shadow-2xl border flex flex-col md:flex-row overflow-hidden transition-colors duration-500 ${tc.bgMain} ${isSecretRevealed ? 'border-amber-600 shadow-amber-900/50' : tc.border} ${tc.font || ''}`}>
+    <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 md:p-6 animate-in fade-in duration-200 overflow-hidden">
+      <div className={`w-full h-full md:max-w-6xl md:h-[90vh] md:rounded-xl shadow-2xl border flex flex-col md:flex-row overflow-hidden transition-colors duration-500 ${tc.bgMain} ${isSecretRevealed ? 'border-amber-600 shadow-amber-900/50' : tc.border} ${tc.font || ''} md:overflow-hidden overflow-y-auto`}>
         
         {/* Left Column: Visuals */}
-        <div className={`w-full md:w-1/3 p-6 flex flex-col border-r overflow-y-auto transition-colors duration-500 ${tc.bgPanel} ${tc.border}`}>
+        <div className={`w-full md:w-1/3 p-4 md:p-6 flex flex-col border-r shrink-0 transition-colors duration-500 ${tc.bgPanel} ${tc.border} md:overflow-y-auto`}>
           <div className="flex justify-between md:hidden mb-4">
             <button onClick={onClose} className={tc.textSub}><Icons.Close /></button>
             <div className="flex gap-2">
               {isEditing ? (
                  <button onClick={handleSave} className={tc.textAccent}><Icons.Save /></button>
               ) : (
-                 <button onClick={() => setIsEditing(true)} className={tc.textSub}><Icons.Edit /></button>
+                 <>
+                  <button onClick={() => setIsEditing(true)} className={tc.textSub}><Icons.Edit /></button>
+                  <button onClick={() => onDelete(formData.id)} className={`${tc.textSub} hover:text-red-500`}><Icons.Trash /></button>
+                 </>
               )}
             </div>
           </div>
@@ -475,9 +472,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
           <div className="text-center">
              {/* Name Display */}
-             <h2 className={`text-2xl font-black mb-1 break-keep leading-tight ${isSecretRevealed ? 'text-amber-500' : tc.textMain}`}>
-                {resolveValue('name', 'name') || (isEditing ? (editLayer === 'SECRET' ? '(비밀 이름 미설정)' : '이름 없음') : '')}
-             </h2>
+             <div className="min-h-[2.5rem] flex items-center justify-center mb-1">
+               <h2 className={`text-2xl font-black break-keep leading-tight transition-all duration-700 ${isSecretRevealed ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' : tc.textMain}`}>
+                  <span key={isSecretRevealed || (isEditing && editLayer === 'SECRET') ? 'secret' : 'public'} className="animate-in fade-in slide-in-from-bottom-2 duration-500 block">
+                    {resolveValue('name', 'name') || (isEditing ? (editLayer === 'SECRET' ? '(비밀 이름 미설정)' : '이름 없음') : '')}
+                  </span>
+               </h2>
+             </div>
              
              {/* Player Name Display */}
              {!isEditing && formData.playerName && (
@@ -546,35 +547,37 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         </div>
 
         {/* Right Column: Details */}
-        <div className={`flex-1 flex flex-col relative bg-transparent`}>
-          {/* Desktop Toolbar */}
-          <div className={`hidden md:flex justify-between items-center p-4 border-b ${tc.border} ${tc.bgPanel}`}>
-             <div className="flex gap-1">
-               <button onClick={() => setActiveTab('INFO')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'INFO' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}>기본 정보</button>
-               <button onClick={() => setActiveTab('BIO')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'BIO' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}>프로필/서사</button>
-               <button onClick={() => setActiveTab('FILES')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'FILES' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}>추가 파일{formData.extraFiles.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.extraFiles.length}</span>}</button>
-               <button onClick={() => setActiveTab('COMMENTS')} className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'COMMENTS' ? tc.textMain + ' bg-white/5 border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}>면담/기록{formData.comments && formData.comments.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.comments.length}</span>}</button>
+        <div className={`flex-1 flex flex-col relative bg-transparent md:h-full h-auto`}>
+          {/* Navigation Toolbar - Sticky on Mobile */}
+          <div className={`sticky top-0 z-20 flex flex-col md:flex-row justify-between items-stretch md:items-center p-2 md:p-4 border-b ${tc.bgPanel} ${tc.border} shadow-lg md:shadow-none`}>
+             {/* Tabs - Scrollable on mobile */}
+             <div className="flex gap-1 overflow-x-auto no-scrollbar w-full md:w-auto pb-1 md:pb-0">
+               <button onClick={() => setActiveTab('INFO')} className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg md:rounded-t-lg transition-colors flex-shrink-0 ${activeTab === 'INFO' ? tc.textMain + ' bg-white/10 md:bg-white/5 md:border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}>기본 정보</button>
+               <button onClick={() => setActiveTab('BIO')} className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg md:rounded-t-lg transition-colors flex-shrink-0 ${activeTab === 'BIO' ? tc.textMain + ' bg-white/10 md:bg-white/5 md:border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'}`}>프로필/서사</button>
+               <button onClick={() => setActiveTab('FILES')} className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg md:rounded-t-lg transition-colors flex-shrink-0 ${activeTab === 'FILES' ? tc.textMain + ' bg-white/10 md:bg-white/5 md:border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}>추가 파일{formData.extraFiles.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.extraFiles.length}</span>}</button>
+               <button onClick={() => setActiveTab('COMMENTS')} className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg md:rounded-t-lg transition-colors flex-shrink-0 ${activeTab === 'COMMENTS' ? tc.textMain + ' bg-white/10 md:bg-white/5 md:border-b-2 ' + tc.border : tc.textSub + ' hover:text-white'} flex items-center gap-2`}>면담/기록{formData.comments && formData.comments.length > 0 && <span className={`text-[10px] px-1.5 rounded-full ${tc.textMain} bg-white/10`}>{formData.comments.length}</span>}</button>
              </div>
              
-             {/* Edit Layer Toggle (Only in Edit Mode) */}
+             {/* Edit Layer Toggle (Only in Edit Mode) - Visible on mobile below tabs if editing */}
              {isEditing && (
-                <div className="flex items-center bg-black/40 rounded-lg p-1 mr-4 border border-stone-700">
+                <div className="flex items-center justify-end bg-black/40 rounded-lg p-1 mt-2 md:mt-0 md:mr-4 border border-stone-700 w-full md:w-auto">
                    <button 
                      onClick={() => setEditLayer('PUBLIC')}
-                     className={`px-3 py-1 text-xs font-bold rounded transition-colors ${editLayer === 'PUBLIC' ? 'bg-stone-700 text-white' : 'text-stone-500 hover:text-stone-300'}`}
+                     className={`flex-1 md:flex-none text-center px-3 py-1 text-xs font-bold rounded transition-colors ${editLayer === 'PUBLIC' ? 'bg-stone-700 text-white' : 'text-stone-500 hover:text-stone-300'}`}
                    >
                      공개 정보
                    </button>
                    <button 
                      onClick={() => setEditLayer('SECRET')}
-                     className={`px-3 py-1 text-xs font-bold rounded transition-colors flex items-center gap-1 ${editLayer === 'SECRET' ? 'bg-amber-800 text-amber-100' : 'text-stone-500 hover:text-amber-500'}`}
+                     className={`flex-1 md:flex-none text-center px-3 py-1 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1 ${editLayer === 'SECRET' ? 'bg-amber-800 text-amber-100' : 'text-stone-500 hover:text-amber-500'}`}
                    >
                      <Icons.Lock size={10} /> 비밀 정보
                    </button>
                 </div>
              )}
 
-             <div className="flex items-center gap-2">
+             {/* Action Buttons - Hidden on Mobile in this bar (moved to Left Column Header) */}
+             <div className="hidden md:flex items-center gap-2">
                {isEditing ? (
                  <>
                    <button onClick={handleSave} className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-transform active:scale-95 ${tc.buttonPrimary}`}><Icons.Save size={16}/> 저장</button>
@@ -590,7 +593,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar relative">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar relative md:h-full min-h-[50vh]">
             
             {/* Secret Mode Overlay Indicator */}
             {isEditing && editLayer === 'SECRET' && (
@@ -598,11 +601,11 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             )}
 
             {activeTab === 'INFO' && (
-              <div className="space-y-6 max-w-2xl animate-in slide-in-from-bottom-2 duration-300">
+              <div className="space-y-6 max-w-2xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                  
                  <EditableField 
                     label={nameLabel} 
-                    value={editLayer === 'SECRET' ? (formData.secretProfile?.name || '') : formData.name} 
+                    value={resolveValue('name', 'name')}
                     onChange={(v) => editLayer === 'SECRET' ? updateSecretField('name', v) : setFormData(p => ({...p, name: v}))} 
                     isEditing={isEditing} 
                     placeholder={campaign.system === SystemType.CYBERPUNK_RED ? '핸들' : '이름'} 
@@ -692,7 +695,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             )}
             
             {activeTab === 'BIO' && (
-               <div className="h-full flex flex-col animate-in slide-in-from-bottom-2 duration-300">
+               <div className="h-full flex flex-col animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                   <EditableField 
                      label="상세 서사 / 메모" 
                      value={resolveValue('description', 'description')} 
@@ -707,7 +710,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             )}
 
             {activeTab === 'FILES' && (
-               <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
+               <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                   {isEditing && (
                     <button onClick={addExtraFile} className={`w-full py-3 border border-dashed rounded flex items-center justify-center gap-2 transition-colors ${tc.border} ${tc.textSub} hover:bg-white/5`}>
                       <Icons.Plus size={16} /> 항목 추가
@@ -748,13 +751,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             )}
 
             {activeTab === 'COMMENTS' && (
-              <div className="h-full flex flex-col relative animate-in slide-in-from-bottom-2 duration-300">
+              <div className="h-full flex flex-col relative animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                 <div className="absolute inset-0 opacity-5 pointer-events-none" 
                      style={{backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px'}} />
                 
-                <div className="flex-1 space-y-4 pb-4 overflow-y-auto max-h-[500px] p-2">
+                <div className="flex-1 space-y-4 pb-4 overflow-y-auto max-h-[500px] md:max-h-none p-2 custom-scrollbar">
                    {formData.comments && formData.comments.length > 0 ? (
-                     <div className="flex flex-wrap gap-4 items-start content-start">
+                     <div className="flex flex-wrap gap-4 items-start content-start justify-center md:justify-start">
                         {formData.comments.map((comment) => {
                           // Style Variants - refined for aesthetics
                           let noteStyle = "bg-[#fef9c3] text-stone-800 -rotate-1 border-b-2 border-r-2 border-[#fcd34d] shadow-lg"; // Default Yellow Note
@@ -776,7 +779,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                           return (
                             <div 
                               key={comment.id} 
-                              className={`relative p-4 w-64 min-h-[140px] transition-all hover:scale-105 hover:z-20 group cursor-default flex flex-col ${noteStyle} ${fontClass}`}
+                              className={`relative p-4 w-full md:w-64 min-h-[140px] transition-all hover:scale-105 hover:z-20 group cursor-default flex flex-col ${noteStyle} ${fontClass}`}
                             >
                               <div className="text-xs font-bold opacity-60 mb-2 flex justify-between items-center border-b border-current pb-1 font-sans">
                                 <span>{comment.userName}</span>
@@ -851,18 +854,18 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                       <option value="BOLD">📢 도현(강조)</option>
                     </select>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col md:flex-row gap-2">
                     <textarea 
                       value={commentText}
                       onChange={e => setCommentText(e.target.value)}
-                      className={`flex-1 h-24 bg-black/20 border ${tc.border} rounded p-3 text-base ${tc.textMain} resize-none focus:border-opacity-100 focus:outline-none placeholder:opacity-40`}
+                      className={`flex-1 h-20 md:h-24 bg-black/20 border ${tc.border} rounded p-3 text-base ${tc.textMain} resize-none focus:border-opacity-100 focus:outline-none placeholder:opacity-40`}
                       placeholder="기록 사항 입력..."
                     />
                     <button 
                       onClick={submitComment}
-                      className={`px-6 font-bold text-sm uppercase tracking-wider rounded transition-transform active:scale-95 flex flex-col items-center justify-center shadow-lg ${tc.buttonPrimary}`}
+                      className={`px-6 py-2 md:py-0 font-bold text-sm uppercase tracking-wider rounded transition-transform active:scale-95 flex flex-row md:flex-col items-center justify-center gap-2 md:gap-0 shadow-lg ${tc.buttonPrimary}`}
                     >
-                      <Icons.Save className="mb-1" size={20} />
+                      <Icons.Save className="mb-0 md:mb-1" size={20} />
                       등록
                     </button>
                   </div>
