@@ -49,6 +49,13 @@ const toDbValue = <T>(value: T | undefined): T | null => {
   return value === undefined ? null : value;
 };
 
+// --- DB 연결 확인 ---
+export const checkDatabaseConnection = async () => {
+  // 캠페인 테이블 존재 여부 확인 (데이터는 가져오지 않음)
+  const { error } = await supabase.from('campaigns').select('id').limit(1);
+  return error;
+};
+
 // --- 전체 상태 로딩 ---
 
 export const loadFullState = async (): Promise<AppState> => {
@@ -56,7 +63,7 @@ export const loadFullState = async (): Promise<AppState> => {
     const { data: settingsData, error: settingsError } = await supabase
       .from('settings')
       .select('*')
-      .maybeSingle(); // single() 대신 maybeSingle() 사용하여 0개 row일 때 에러 방지
+      .maybeSingle(); 
     
     const { data: campaignsData, error: campError } = await supabase
       .from('campaigns')
@@ -75,6 +82,9 @@ export const loadFullState = async (): Promise<AppState> => {
     if (charError) console.error('Character Error:', charError);
     if (fileError) console.error('File Error:', fileError);
 
+    // 테이블이 아예 없는 경우(PGRST205 등)는 상위에서 처리하도록 에러를 던질 수도 있지만,
+    // 여기서는 빈 배열로 처리하고 checkDatabaseConnection에서 잡도록 함.
+    
     const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
       id: c.id,
       name: c.name,
@@ -119,8 +129,7 @@ export const loadFullState = async (): Promise<AppState> => {
       };
     });
 
-    // DB가 비어있으면 초기 상태 반환하되, 초기 상태의 ID가 DB에 없을 수 있으므로 주의 필요
-    // 하지만 읽기 전용으로 시작하므로 괜찮음.
+    // DB가 비어있고 설정도 없으면 초기 상태 반환
     if (campaigns.length === 0 && (!settingsData || !settingsData.password)) {
        return INITIAL_STATE;
     }
@@ -178,14 +187,8 @@ export const saveCampaign = async (campaign: Campaign) => {
 };
 
 export const deleteCampaign = async (id: string) => {
-  // 로컬 초기 데이터(Initial State)라서 DB에 없는 경우를 대비해 에러 무시하지 않음
-  // 다만 UUID 형식이 아니면 DB 호출 방지
   if (!isUuid(id)) return;
-
-  // ON DELETE CASCADE가 설정되어 있으므로 campaigns만 삭제하면 characters, extra_files 모두 자동 삭제됨.
-  // 복잡한 수동 삭제 로직을 제거하여 트랜잭션 오류 및 권한 오류 방지.
   const { error } = await supabase.from('campaigns').delete().eq('id', id);
-  
   if (error) throw error;
 };
 
@@ -194,8 +197,6 @@ export const saveCharacter = async (char: Character) => {
     throw new Error(`Invalid Character ID: ${char.id}`);
   }
 
-  // 1. 캐릭터 기본 정보 저장
-  // undefined 값을 null로 변환하여 DB에 명시적으로 필드를 비우도록 함
   const dbChar = {
     id: char.id,
     campaign_id: char.campaignId,
@@ -217,8 +218,7 @@ export const saveCharacter = async (char: Character) => {
   const { error: charError } = await supabase.from('characters').upsert(dbChar);
   if (charError) throw charError;
 
-  // 2. 추가 파일 처리
-  // 기존 파일 삭제 후 재등록
+  // 추가 파일 처리
   const { error: deleteError } = await supabase.from('extra_files').delete().eq('character_id', char.id);
   if (deleteError) throw deleteError;
 
@@ -240,20 +240,16 @@ export const saveCharacter = async (char: Character) => {
 
 export const deleteCharacter = async (id: string) => {
   if (!isUuid(id)) return;
-
-  // ON DELETE CASCADE가 설정되어 있으므로 캐릭터만 삭제하면 파일도 자동 삭제됨
   const { error } = await supabase.from('characters').delete().eq('id', id);
   if (error) throw error;
 };
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // 5MB 용량 제한 체크 (Supabase 및 HTTP 요청 크기 제한 고려)
     if (file.size > 5 * 1024 * 1024) {
       reject(new Error("이미지 파일 크기는 5MB 이하여야 합니다."));
       return;
     }
-
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => resolve(reader.result as string);

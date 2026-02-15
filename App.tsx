@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { loadFullState, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings } from './services/storage';
+import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings } from './services/storage';
 import { AppState, Campaign, Character } from './types';
 import Layout from './components/Layout';
 import MainDashboard from './components/views/MainDashboard';
 import CampaignDashboard from './components/views/CampaignDashboard';
 import CharacterDetail from './components/views/CharacterDetail';
+import DatabaseSetup from './components/views/DatabaseSetup';
 import SettingsModal from './components/modals/SettingsModal';
 import PasswordModal from './components/modals/PasswordModal';
 import { Icons } from './components/ui/Icons';
@@ -14,6 +15,7 @@ const App: React.FC = () => {
   // --- 상태 관리 ---
   const [data, setData] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
   
   // 네비게이션 상태
   const [currentView, setCurrentView] = useState<'HOME' | 'CAMPAIGN'>('HOME');
@@ -32,22 +34,44 @@ const App: React.FC = () => {
   }>({ isOpen: false, action: () => {}, title: '' });
 
   // --- 초기 로딩 ---
+  const init = async () => {
+    setLoading(true);
+    setDbError(null);
+
+    // 1. DB 연결/테이블 존재 여부 체크
+    const connectionError = await checkDatabaseConnection();
+    if (connectionError) {
+      console.error("DB Connection Error:", connectionError);
+      // PGRST205: Relation not found (테이블 없음)
+      // 42P01: Postgres undefined table
+      if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || connectionError.message.includes('not find the table')) {
+        setDbError(connectionError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 2. 데이터 로드
+    const fetched = await loadFullState();
+    setData(fetched);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      const fetched = await loadFullState();
-      setData(fetched);
-      setLoading(false);
-    };
     init();
   }, []);
+
+  // 에러 화면 (DB 미설정 등)
+  if (dbError) {
+    return <DatabaseSetup onRetry={init} errorMsg={dbError} />;
+  }
 
   // 로딩 중 표시
   if (loading || !data) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white gap-4">
         <div className="animate-spin text-blue-500"><Icons.Refresh size={48} /></div>
-        <p className="text-slate-400">서버와 통신 중입니다...</p>
+        <p className="text-slate-400">데이터베이스 동기화 중...</p>
       </div>
     );
   }
@@ -58,6 +82,13 @@ const App: React.FC = () => {
   const handleError = (e: any, defaultMsg: string) => {
     console.error(e);
     const msg = e instanceof Error ? e.message : JSON.stringify(e);
+    
+    // 테이블 없음 에러 발생 시 초기화 화면으로 유도
+    if (msg.includes('relation') && msg.includes('does not exist') || msg.includes('not find the table')) {
+       setDbError(msg);
+       return;
+    }
+
     alert(`${defaultMsg}\n\n상세 에러: ${msg}`);
   };
 
