@@ -21,8 +21,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'GLOBAL' | 'CAMPAIGN'>('GLOBAL');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(currentCampaignId || campaigns[0]?.id);
-  const [newBgUrl, setNewBgUrl] = useState('');
-
+  
   // New Campaign State
   const [isCreating, setIsCreating] = useState(false);
   const [newCampName, setNewCampName] = useState('');
@@ -47,9 +46,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!newCampName) return;
     
     let subTitle = 'New Campaign';
-    if (newCampSys === SystemType.DND5E) subTitle = 'New DnD Campaign';
-    else if (newCampSys === SystemType.CYBERPUNK_RED) subTitle = 'New Cyberpunk Campaign';
-    else subTitle = 'Custom Rule Campaign';
+    switch (newCampSys) {
+      case SystemType.DND5E: subTitle = 'Dungeons & Dragons 5th Ed'; break;
+      case SystemType.CYBERPUNK_RED: subTitle = 'Cyberpunk RED'; break;
+      case SystemType.COC7: subTitle = 'Call of Cthulhu 7th Ed'; break;
+      case SystemType.BAND_OF_BLADES: subTitle = 'Band of Blades'; break;
+      default: subTitle = 'Custom Rule Campaign';
+    }
 
     const newCamp: Campaign = {
       id: crypto.randomUUID(),
@@ -139,6 +142,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                      >
                        <option value={SystemType.DND5E}>DnD 5e</option>
                        <option value={SystemType.CYBERPUNK_RED}>Cyberpunk RED</option>
+                       <option value={SystemType.COC7}>Call of Cthulhu 7th</option>
+                       <option value={SystemType.BAND_OF_BLADES}>Band of Blades</option>
                        <option value={SystemType.OTHER}>기타 (자유 입력)</option>
                      </select>
                      <div className="flex justify-end gap-2">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings } from './services/storage';
-import { AppState, Campaign, Character } from './types';
+import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, deleteComment as dbDeleteComment } from './services/storage';
+import { AppState, Campaign, Character, CharacterComment } from './types';
 import Layout from './components/Layout';
 import MainDashboard from './components/views/MainDashboard';
 import CampaignDashboard from './components/views/CampaignDashboard';
@@ -9,7 +9,7 @@ import DatabaseSetup from './components/views/DatabaseSetup';
 import SettingsModal from './components/modals/SettingsModal';
 import PasswordModal from './components/modals/PasswordModal';
 import { Icons } from './components/ui/Icons';
-import { INITIAL_STATE } from './constants';
+import { INITIAL_STATE, THEMES, THEME_KEYS } from './constants';
 
 const App: React.FC = () => {
   // --- 상태 관리 ---
@@ -149,6 +149,52 @@ const App: React.FC = () => {
     });
   };
 
+  // 코멘트 CRUD
+  const handleAddComment = async (comment: CharacterComment) => {
+     try {
+       await dbAddComment(comment);
+       setData(prev => {
+         if(!prev) return null;
+         const charIndex = prev.characters.findIndex(c => c.id === comment.characterId);
+         if(charIndex === -1) return prev;
+         
+         const updatedChar = {
+            ...prev.characters[charIndex],
+            comments: [...(prev.characters[charIndex].comments || []), comment]
+         };
+         
+         const newChars = [...prev.characters];
+         newChars[charIndex] = updatedChar;
+         return { ...prev, characters: newChars };
+       });
+     } catch (e) {
+       handleError(e, "코멘트 작성 실패");
+     }
+  };
+
+  const handleDeleteComment = async (commentId: string, characterId: string) => {
+    try {
+      await dbDeleteComment(commentId);
+      setData(prev => {
+        if(!prev) return null;
+        const charIndex = prev.characters.findIndex(c => c.id === characterId);
+        if(charIndex === -1) return prev;
+
+        const updatedChar = {
+           ...prev.characters[charIndex],
+           comments: prev.characters[charIndex].comments.filter(c => c.id !== commentId)
+        };
+
+        const newChars = [...prev.characters];
+        newChars[charIndex] = updatedChar;
+        return { ...prev, characters: newChars };
+      });
+    } catch (e) {
+      handleError(e, "코멘트 삭제 실패");
+    }
+  };
+
+
   // 캠페인 CRUD
   const updateCampaign = async (updated: Campaign) => {
     try {
@@ -222,8 +268,14 @@ const App: React.FC = () => {
     ? activeCampaign.backgroundImages
     : data.globalBackgrounds;
 
+  // Determine Theme
+  const activeTheme = activeCampaign?.theme ? THEMES[activeCampaign.theme] : THEMES[THEME_KEYS.ADVENTURE];
+
   return (
-    <Layout backgrounds={currentBackgrounds}>
+    <Layout 
+      backgrounds={currentBackgrounds}
+      themeClasses={activeCampaign ? activeTheme.classes : undefined}
+    >
       {currentView === 'HOME' && (
         <MainDashboard 
           campaigns={data.campaigns}
@@ -264,6 +316,9 @@ const App: React.FC = () => {
             setActiveCharacterId(null);
             setIsCreatingCharacter(false);
           }}
+          // Comment handlers
+          onAddComment={handleAddComment}
+          onDeleteComment={handleDeleteComment}
         />
       )}
 

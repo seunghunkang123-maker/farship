@@ -15,7 +15,8 @@ import {
   Upload,
   RefreshCw,
   Lock,
-  MoreVertical
+  MoreVertical,
+  Palette
 } from 'lucide-react';
 
 export const Icons = {
@@ -35,5 +36,6 @@ export const Icons = {
   Upload,
   Refresh: RefreshCw,
   Lock,
-  Menu: MoreVertical
+  Menu: MoreVertical,
+  Palette
 };

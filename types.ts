@@ -1,6 +1,8 @@
 export enum SystemType {
   DND5E = 'DND5E',
   CYBERPUNK_RED = 'CPRED',
+  COC7 = 'COC7',
+  BAND_OF_BLADES = 'BAND_OF_BLADES',
   OTHER = 'OTHER'
 }
 
@@ -13,16 +15,35 @@ export interface ExtraFile {
   isSecret?: boolean; // If true, content is hidden until revealed
 }
 
+export interface CharacterComment {
+  id: string;
+  characterId: string;
+  userName: string;
+  content: string;
+  styleVariant: 'NOTE' | 'STAMP' | 'WARNING' | 'MEMO'; // UI style
+  createdAt: number;
+}
+
 export interface Character {
   id: string;
   campaignId: string;
-  name: string;
+  name: string; // Used as "Handle" in Cyberpunk
+  realName?: string; // New: Real Name / Secret Identity
   isNpc: boolean;
   imageUrl?: string; // Base64 or URL
   imageFit: 'cover' | 'contain';
   summary: string; // One line summary
   description?: string; // Detailed bio
   
+  // New Physical/Bio Fields
+  age?: string;
+  gender?: string;
+  height?: string;
+  weight?: string;
+  appearance?: string; // Short visual description
+
+  levelOrExp?: string; // Level, Rank, Age, etc.
+
   // DnD Specific
   dndClass?: string;
   dndSubclass?: string;
@@ -37,6 +58,7 @@ export interface Character {
   
   // Common Extra Fields
   extraFiles: ExtraFile[];
+  comments: CharacterComment[]; // Added Comments
   updatedAt: number;
 }
 
@@ -48,6 +70,7 @@ export interface Campaign {
   logoUrl?: string; // Base64 or URL
   backgroundImages: string[]; // Array of Base64 or URLs
   description?: string;
+  theme?: string; // New: UI Theme Key
 }
 
 export interface AppState {
@@ -86,3 +109,33 @@ export const CPRED_ROLES = [
   '픽서 (Fixer)',
   '노마드 (Nomad)',
 ];
+
+export const BOB_PLAYBOOKS = [
+  '지휘관 (Commander)',
+  '마샬 (Marshal)',
+  '쿼터마스터 (Quartermaster)',
+  '스파이마스터 (Spymaster)',
+  '로어키퍼 (Lorekeeper)',
+  '중장보병 (Heavy)',
+  '의무병 (Medic)',
+  '정찰병 (Scout)',
+  '저격수 (Sniper)',
+  '신병 (Rookie)',
+];
+
+// --- Theme Definition Type ---
+export interface ThemeConfig {
+  name: string;
+  classes: {
+    bgMain: string;       // Main container background (usually transparent/glass)
+    bgPanel: string;      // Panel/Card background
+    textMain: string;     // Primary Text
+    textSub: string;      // Secondary Text
+    textAccent: string;   // Highlight/Link Text
+    border: string;       // Border color
+    buttonPrimary: string;// Primary Button
+    buttonSecondary: string; // Secondary/Icon Button
+    font?: string;        // Optional font family utility
+    overlay?: string;     // Optional overlay for atmosphere
+  };
+}

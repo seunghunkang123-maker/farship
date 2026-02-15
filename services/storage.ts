@@ -1,4 +1,4 @@
-import { AppState, Campaign, Character, ExtraFile, SystemType } from '../types';
+import { AppState, Campaign, Character, CharacterComment, ExtraFile, SystemType } from '../types';
 import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
 
@@ -7,11 +7,21 @@ interface DbCharacter {
   id: string;
   campaign_id: string;
   name: string;
+  real_name: string | null;
   is_npc: boolean;
   image_url: string | null;
   image_fit: 'cover' | 'contain';
   summary: string | null;
   description: string | null;
+  level_or_exp: string | null;
+  
+  // Bio Fields
+  age: string | null;
+  gender: string | null;
+  height: string | null;
+  weight: string | null;
+  appearance: string | null;
+
   dnd_class: string | null;
   dnd_subclass: string | null;
   cpred_role: string | null;
@@ -31,6 +41,15 @@ interface DbExtraFile {
   is_secret: boolean;
 }
 
+interface DbComment {
+  id: string;
+  character_id: string;
+  user_name: string;
+  content: string;
+  style_variant: string;
+  created_at: string;
+}
+
 interface DbCampaign {
   id: string;
   name: string;
@@ -39,6 +58,7 @@ interface DbCampaign {
   logo_url: string | null;
   background_images: string[] | null;
   description: string | null;
+  theme: string | null; // Added
 }
 
 // Helper: UUID 검증
@@ -51,7 +71,6 @@ const toDbValue = <T>(value: T | undefined): T | null => {
 
 // --- DB 연결 확인 ---
 export const checkDatabaseConnection = async () => {
-  // 캠페인 테이블 존재 여부 확인 (데이터는 가져오지 않음)
   const { error } = await supabase.from('campaigns').select('id').limit(1);
   return error;
 };
@@ -77,14 +96,18 @@ export const loadFullState = async (): Promise<AppState> => {
       .from('extra_files')
       .select('*');
 
+    // Load Comments (new)
+    const { data: commentData, error: commentError } = await supabase
+      .from('character_comments')
+      .select('*');
+
     if (settingsError && settingsError.code !== 'PGRST116') console.error('Settings Error:', settingsError);
     if (campError) console.error('Campaign Error:', campError);
     if (charError) console.error('Character Error:', charError);
     if (fileError) console.error('File Error:', fileError);
+    // Ignore comment table missing error for backward compatibility
+    if (commentError && commentError.code !== '42P01') console.error('Comment Error:', commentError);
 
-    // 테이블이 아예 없는 경우(PGRST205 등)는 상위에서 처리하도록 에러를 던질 수도 있지만,
-    // 여기서는 빈 배열로 처리하고 checkDatabaseConnection에서 잡도록 함.
-    
     const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
       id: c.id,
       name: c.name,
@@ -92,10 +115,12 @@ export const loadFullState = async (): Promise<AppState> => {
       system: c.system as SystemType,
       logoUrl: c.logo_url || undefined,
       backgroundImages: c.background_images || [],
-      description: c.description || undefined
+      description: c.description || undefined,
+      theme: c.theme || undefined 
     }));
 
     const files = (fileData || []) as DbExtraFile[];
+    const comments = (commentData || []) as DbComment[];
 
     const characters: Character[] = (charData || []).map((c: DbCharacter) => {
       const myFiles: ExtraFile[] = files
@@ -109,15 +134,36 @@ export const loadFullState = async (): Promise<AppState> => {
           isSecret: f.is_secret
         }));
 
+      const myComments: CharacterComment[] = comments
+        .filter(cmt => cmt.character_id === c.id)
+        .map(cmt => ({
+          id: cmt.id,
+          characterId: cmt.character_id,
+          userName: cmt.user_name,
+          content: cmt.content,
+          styleVariant: (cmt.style_variant as any) || 'NOTE',
+          createdAt: new Date(cmt.created_at).getTime()
+        }));
+
       return {
         id: c.id,
         campaignId: c.campaign_id,
         name: c.name,
+        realName: c.real_name || undefined,
         isNpc: c.is_npc,
         imageUrl: c.image_url || undefined,
         imageFit: c.image_fit,
         summary: c.summary || '',
         description: c.description || undefined,
+        levelOrExp: c.level_or_exp || undefined,
+        
+        // Bio Fields
+        age: c.age || undefined,
+        gender: c.gender || undefined,
+        height: c.height || undefined,
+        weight: c.weight || undefined,
+        appearance: c.appearance || undefined,
+
         dndClass: c.dnd_class || undefined,
         dndSubclass: c.dnd_subclass || undefined,
         cpredRole: c.cpred_role || undefined,
@@ -125,11 +171,11 @@ export const loadFullState = async (): Promise<AppState> => {
         customClass: c.custom_class || undefined,
         customSubclass: c.custom_subclass || undefined,
         extraFiles: myFiles,
+        comments: myComments,
         updatedAt: c.updated_at
       };
     });
 
-    // DB가 비어있고 설정도 없으면 초기 상태 반환
     if (campaigns.length === 0 && (!settingsData || !settingsData.password)) {
        return INITIAL_STATE;
     }
@@ -179,7 +225,8 @@ export const saveCampaign = async (campaign: Campaign) => {
     system: campaign.system,
     logo_url: toDbValue(campaign.logoUrl),
     background_images: campaign.backgroundImages,
-    description: toDbValue(campaign.description)
+    description: toDbValue(campaign.description),
+    theme: toDbValue(campaign.theme)
   };
 
   const { error } = await supabase.from('campaigns').upsert(dbCamp);
@@ -201,11 +248,21 @@ export const saveCharacter = async (char: Character) => {
     id: char.id,
     campaign_id: char.campaignId,
     name: char.name,
+    real_name: toDbValue(char.realName),
     is_npc: char.isNpc,
     image_url: toDbValue(char.imageUrl),
     image_fit: char.imageFit,
     summary: toDbValue(char.summary),
     description: toDbValue(char.description),
+    level_or_exp: toDbValue(char.levelOrExp),
+    
+    // Bio Fields
+    age: toDbValue(char.age),
+    gender: toDbValue(char.gender),
+    height: toDbValue(char.height),
+    weight: toDbValue(char.weight),
+    appearance: toDbValue(char.appearance),
+
     dnd_class: toDbValue(char.dndClass),
     dnd_subclass: toDbValue(char.dndSubclass),
     cpred_role: toDbValue(char.cpredRole),
@@ -218,7 +275,6 @@ export const saveCharacter = async (char: Character) => {
   const { error: charError } = await supabase.from('characters').upsert(dbChar);
   if (charError) throw charError;
 
-  // 추가 파일 처리
   const { error: deleteError } = await supabase.from('extra_files').delete().eq('character_id', char.id);
   if (deleteError) throw deleteError;
 
@@ -243,6 +299,26 @@ export const deleteCharacter = async (id: string) => {
   const { error } = await supabase.from('characters').delete().eq('id', id);
   if (error) throw error;
 };
+
+export const addComment = async (comment: CharacterComment) => {
+  const dbComment = {
+    id: comment.id,
+    character_id: comment.characterId,
+    user_name: comment.userName,
+    content: comment.content,
+    style_variant: comment.styleVariant,
+    created_at: new Date(comment.createdAt).toISOString()
+  };
+  
+  const { error } = await supabase.from('character_comments').insert(dbComment);
+  if (error) throw error;
+};
+
+export const deleteComment = async (id: string) => {
+  const { error } = await supabase.from('character_comments').delete().eq('id', id);
+  if (error) throw error;
+};
+
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
