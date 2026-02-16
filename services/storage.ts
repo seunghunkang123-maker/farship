@@ -8,6 +8,9 @@ interface DbCharacter {
   id: string;
   campaign_id: string;
   name: string;
+  alias: string | null; // New
+  is_name_blurred: boolean; // New
+
   real_name: string | null;
   player_name: string | null; 
   is_npc: boolean;
@@ -31,7 +34,7 @@ interface DbCharacter {
   custom_class: string | null;
   custom_subclass: string | null;
   
-  secret_profile: SecretProfile | null; // Added: JSONB column
+  secret_profile: SecretProfile | null; 
 
   updated_at: number;
 }
@@ -65,6 +68,7 @@ interface DbCampaign {
   background_images: string[] | null;
   description: string | null;
   theme: string | null;
+  alias_label: string | null; // New
 }
 
 // Helper: UUID 검증
@@ -120,7 +124,8 @@ export const loadFullState = async (): Promise<AppState> => {
       logoUrl: c.logo_url || undefined,
       backgroundImages: c.background_images || [],
       description: c.description || undefined,
-      theme: c.theme || undefined 
+      theme: c.theme || undefined,
+      aliasLabel: c.alias_label || undefined // New
     }));
 
     const files = (fileData || []) as DbExtraFile[];
@@ -154,6 +159,9 @@ export const loadFullState = async (): Promise<AppState> => {
         id: c.id,
         campaignId: c.campaign_id,
         name: c.name,
+        alias: c.alias || undefined, // New
+        isNameBlurred: c.is_name_blurred || false, // New
+
         realName: c.real_name || undefined,
         playerName: c.player_name || undefined,
         isNpc: c.is_npc,
@@ -177,7 +185,7 @@ export const loadFullState = async (): Promise<AppState> => {
         customClass: c.custom_class || undefined,
         customSubclass: c.custom_subclass || undefined,
         
-        secretProfile: c.secret_profile || undefined, // Mapped
+        secretProfile: c.secret_profile || undefined, 
 
         extraFiles: myFiles,
         comments: myComments,
@@ -235,7 +243,8 @@ export const saveCampaign = async (campaign: Campaign) => {
     logo_url: toDbValue(campaign.logoUrl),
     background_images: campaign.backgroundImages,
     description: toDbValue(campaign.description),
-    theme: toDbValue(campaign.theme)
+    theme: toDbValue(campaign.theme),
+    alias_label: toDbValue(campaign.aliasLabel) // New
   };
 
   const { error } = await supabase.from('campaigns').upsert(dbCamp);
@@ -257,6 +266,9 @@ export const saveCharacter = async (char: Character) => {
     id: char.id,
     campaign_id: char.campaignId,
     name: char.name,
+    alias: toDbValue(char.alias), // New
+    is_name_blurred: char.isNameBlurred, // New
+
     real_name: toDbValue(char.realName),
     player_name: toDbValue(char.playerName),
     is_npc: char.isNpc,
@@ -280,7 +292,7 @@ export const saveCharacter = async (char: Character) => {
     custom_class: toDbValue(char.customClass),
     custom_subclass: toDbValue(char.customSubclass),
     
-    secret_profile: toDbValue(char.secretProfile), // Save JSONB
+    secret_profile: toDbValue(char.secretProfile), 
 
     updated_at: char.updatedAt
   };

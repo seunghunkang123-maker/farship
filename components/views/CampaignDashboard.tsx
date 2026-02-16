@@ -12,20 +12,68 @@ interface CampaignDashboardProps {
   onSelectCharacter: (charId: string) => void;
   onAddCharacter: () => void;
   onOpenSettings: () => void;
+  // New props for Truth Reveal
+  revealedCharacterIds: Set<string>;
+  isGlobalReveal: boolean;
+  onToggleGlobalReveal: () => void;
+  // Name Reveal State
+  nameRevealedIds: Set<string>;
 }
 
-// 멤버별 색상 매핑
 const MEMBER_COLORS: Record<string, string> = {
-  '승훈': 'bg-red-900/90 text-red-100 border-red-500/50 shadow-[0_0_10px_rgba(220,38,38,0.3)]', // 요청: 빨간색
-  '피쉬': 'bg-blue-900/90 text-blue-100 border-blue-500/50 shadow-[0_0_10px_rgba(37,99,235,0.3)]', // 물/파랑
-  '델리': 'bg-orange-900/90 text-orange-100 border-orange-500/50 shadow-[0_0_10px_rgba(234,88,12,0.3)]', // 델리/주황
-  '망령': 'bg-violet-900/90 text-violet-100 border-violet-500/50 shadow-[0_0_10px_rgba(139,92,246,0.3)]', // 영혼/보라
-  '배추': 'bg-emerald-900/90 text-emerald-100 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]', // 야채/초록
-  '유자': 'bg-yellow-900/90 text-yellow-100 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.3)]', // 유자/노랑
+  '승훈': 'bg-red-900/90 text-red-100 border-red-500/50 shadow-[0_0_10px_rgba(220,38,38,0.3)]',
+  '피쉬': 'bg-blue-900/90 text-blue-100 border-blue-500/50 shadow-[0_0_10px_rgba(37,99,235,0.3)]',
+  '델리': 'bg-orange-900/90 text-orange-100 border-orange-500/50 shadow-[0_0_10px_rgba(234,88,12,0.3)]',
+  '망령': 'bg-violet-900/90 text-violet-100 border-violet-500/50 shadow-[0_0_10px_rgba(139,92,246,0.3)]',
+  '배추': 'bg-emerald-900/90 text-emerald-100 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]',
+  '유자': 'bg-yellow-900/90 text-yellow-100 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.3)]',
 };
 
-// 게스트(기본) 색상
 const GUEST_COLOR = 'bg-slate-800/90 text-slate-300 border-slate-600 backdrop-blur-sm';
+
+// Helper: Extract Numeric Level
+const getLevelNumber = (levelStr?: string): number => {
+  if (!levelStr) return 0;
+  const num = parseInt(levelStr.replace(/[^0-9]/g, ''), 10);
+  return isNaN(num) ? 0 : num;
+};
+
+// --- Power Level Visual Logic (Enhanced) ---
+// Returns: { count: 1-5, tierClass: string, isEpic: boolean }
+const getPowerVisuals = (system: SystemType, levelStr?: string, themeAccent?: string) => {
+  if (system !== SystemType.DND5E) return null;
+  
+  const level = getLevelNumber(levelStr);
+  if (level === 0) return null;
+
+  let count = 0;
+  let colorClass = themeAccent || 'text-stone-400';
+  let effectClass = '';
+
+  // Scale: 1 Dot = 2 Levels
+  // Lv 1-10: Basic Tier (Color: Theme Accent)
+  // Lv 11-20: Heroic Tier (Color: Purple/Violet)
+  // Lv 21-30: Epic Tier (Color: Rose/Red + Pulse)
+
+  if (level <= 10) {
+    count = Math.ceil(level / 2);
+    // Use passed theme accent
+  } else if (level <= 20) {
+    count = Math.ceil((level - 10) / 2);
+    colorClass = 'text-purple-400 drop-shadow-[0_0_5px_rgba(192,132,252,0.6)]';
+  } else {
+    // Over 20
+    count = Math.ceil((level - 20) / 2);
+    colorClass = 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.8)]';
+    effectClass = 'animate-pulse';
+  }
+
+  // Cap at 5 dots
+  count = Math.max(1, Math.min(count, 5));
+
+  return { count, colorClass, effectClass };
+};
+
 
 const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   campaign,
@@ -33,7 +81,11 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   onBack,
   onSelectCharacter,
   onAddCharacter,
-  onOpenSettings
+  onOpenSettings,
+  revealedCharacterIds,
+  isGlobalReveal,
+  onToggleGlobalReveal,
+  nameRevealedIds
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'PC' | 'NPC'>('ALL');
@@ -48,18 +100,18 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   const handleThemeChange = async (newThemeKey: string) => {
     try {
       await saveCampaign({ ...campaign, theme: newThemeKey });
-      window.location.reload(); // Simple brute force to sync state for now.
+      window.location.reload(); 
     } catch (e) {
       console.error(e);
       alert('테마 저장 실패');
     }
   };
 
-  // Filter Logic
   const filteredChars = useMemo(() => {
     return characters
       .filter((c) => {
         const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              (c.alias && c.alias.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (c.customClass && c.customClass.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (c.playerName && c.playerName.toLowerCase().includes(searchTerm.toLowerCase()));
         
@@ -81,7 +133,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
   return (
     <div className={`flex flex-col h-full transition-colors duration-500 ${theme.classes.bgMain} ${theme.classes.font || ''}`}>
-      {/* Optional Theme Overlay */}
       {theme.classes.overlay && <div className={`absolute inset-0 pointer-events-none z-0 ${theme.classes.overlay}`} />}
       
       {/* Header Bar */}
@@ -92,7 +143,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
               <Icons.Back size={24} />
             </button>
             
-            {/* Theme Switcher */}
             <div className="relative">
               <button 
                 onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
@@ -134,6 +184,16 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
         </div>
         
         <div className="flex items-center justify-end gap-2 relative z-30 w-full md:w-auto">
+           {/* Global Reveal Toggle */}
+           <button 
+            onClick={onToggleGlobalReveal}
+            className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-all shadow-lg border ${isGlobalReveal ? 'bg-amber-900/80 text-amber-200 border-amber-600 shadow-amber-900/50' : `${theme.classes.buttonSecondary} border-transparent bg-black/20`}`}
+            title="모든 캐릭터의 진상(비밀)을 봅니다"
+          >
+            {isGlobalReveal ? <Icons.Lock size={18} className="text-amber-400" /> : <Icons.Lock size={18} />}
+            <span className="hidden md:inline">{isGlobalReveal ? '진상 모드 ON' : '진상 일괄 전환'}</span>
+          </button>
+
           <button 
             onClick={onAddCharacter}
             className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-colors shadow-lg ${theme.classes.buttonPrimary}`}
@@ -154,7 +214,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
           <Icons.Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${theme.classes.textSub}`} size={16} />
           <input 
             type="text"
-            placeholder="이름, 클래스, 플레이어 검색..."
+            placeholder="이름, 칭호, 클래스, 플레이어 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={`w-full bg-transparent border rounded-full py-1.5 pl-10 pr-4 text-sm focus:outline-none transition-colors ${theme.classes.textMain} ${theme.classes.border} focus:border-opacity-100 placeholder:opacity-50`}
@@ -208,49 +268,74 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
             {filteredChars.map((char) => {
-               let subInfo = char.summary;
-               
-               if (campaign.system === SystemType.DND5E && char.dndClass) {
-                 subInfo = char.dndClass;
-                 if (char.levelOrExp) subInfo += ` (Lv.${char.levelOrExp})`;
-               }
-               else if (campaign.system === SystemType.CYBERPUNK_RED && char.cpredRole) {
-                 subInfo = char.cpredRole;
-               }
-               else if (campaign.system === SystemType.COC7 && char.customClass) {
-                 subInfo = char.customClass; 
-               }
-               else if (campaign.system === SystemType.BAND_OF_BLADES && char.customClass) {
-                 subInfo = char.customClass;
-                 if (char.levelOrExp) subInfo += ` (${char.levelOrExp})`;
-               }
-               else if (campaign.system === SystemType.OTHER && char.customClass) {
-                 subInfo = char.customClass;
+               // Determine Reveal State
+               const isRevealed = isGlobalReveal || revealedCharacterIds.has(char.id);
+               // Name Reveal State (Blur)
+               const isNameRevealed = nameRevealedIds.has(char.id);
+
+               // Resolve Display Values based on Reveal State
+               // Logic Updated: Prefer Secret Alias -> Secret Name -> Public Alias -> Public Name
+               let nameToDisplay = char.name;
+               let subName: string | null = null;
+
+               if (isRevealed) {
+                  // Secret Mode Logic
+                  if (char.secretProfile?.alias) {
+                     nameToDisplay = char.secretProfile.alias;
+                     subName = char.secretProfile.name || char.alias || char.name; // Fallback to other names for subtitle
+                  } else if (char.secretProfile?.name) {
+                     nameToDisplay = char.secretProfile.name;
+                     subName = char.alias || char.name;
+                  } else {
+                     // Fallback if secret profile has no name
+                     nameToDisplay = char.alias || char.name;
+                     subName = char.alias ? char.name : null;
+                  }
+               } else {
+                  // Public Mode Logic
+                  nameToDisplay = char.alias || char.name;
+                  subName = char.alias ? char.name : null;
                }
 
-               const activePortrait = char.extraFiles.find(f => f.useAsPortrait && f.imageUrl && !f.isSecret);
-               const displayImg = activePortrait ? activePortrait.imageUrl : char.imageUrl;
+               const summaryToDisplay = isRevealed ? (char.secretProfile?.summary || char.summary) : char.summary;
+               const levelToDisplay = isRevealed ? (char.secretProfile?.levelOrExp || char.levelOrExp) : char.levelOrExp;
+
+               // Class/Role Info
+               let roleInfo = '';
+               if (campaign.system === SystemType.DND5E && char.dndClass) roleInfo = char.dndClass;
+               else if (campaign.system === SystemType.CYBERPUNK_RED && char.cpredRole) roleInfo = char.cpredRole;
+               else if (campaign.system === SystemType.COC7 && char.customClass) roleInfo = char.customClass; 
+               else if (campaign.system === SystemType.BAND_OF_BLADES && char.customClass) roleInfo = char.customClass;
+               else if (campaign.system === SystemType.OTHER && char.customClass) roleInfo = char.customClass;
+
+               // Visual Power Tier (Enhanced)
+               const powerVisuals = getPowerVisuals(campaign.system, levelToDisplay, theme.classes.textAccent);
+
+               // Image Logic
+               // Check for extra files used as portrait (priority)
+               // In secret mode, we also look for secret profile image
+               const activePortrait = char.extraFiles.find(f => f.useAsPortrait && f.imageUrl && (!f.isSecret || isRevealed));
+               let displayImg = activePortrait ? activePortrait.imageUrl : char.imageUrl;
+               if (isRevealed && char.secretProfile?.image_url) displayImg = char.secretProfile.image_url;
                
-               // 플레이어 이름표 스타일 결정 (멤버별 색상 vs 게스트)
+               // Badge Style
                let badgeStyle = GUEST_COLOR;
                if (char.playerName) {
-                 if (MEMBER_COLORS[char.playerName]) {
-                   badgeStyle = MEMBER_COLORS[char.playerName];
-                 }
+                 if (MEMBER_COLORS[char.playerName]) badgeStyle = MEMBER_COLORS[char.playerName];
                }
-
+               
                return (
                 <div 
                   key={char.id}
                   onClick={() => onSelectCharacter(char.id)}
-                  className={`group cursor-pointer rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col border ${theme.classes.bgPanel} ${activePortrait ? 'border-yellow-500' : theme.classes.border}`}
+                  className={`group cursor-pointer rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col border ${theme.classes.bgPanel} ${activePortrait ? 'border-yellow-500' : isRevealed ? 'border-amber-700 shadow-amber-900/30' : theme.classes.border}`}
                 >
                   {/* Image Container */}
                   <div className="aspect-square bg-black/20 relative overflow-hidden">
                     {displayImg ? (
                       <img 
                         src={displayImg} 
-                        alt={char.name} 
+                        alt={nameToDisplay} 
                         className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${char.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}
                       />
                     ) : (
@@ -266,8 +351,17 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                       </span>
                     </div>
 
-                    {/* Player Name Badge - Top Right */}
-                    {char.playerName && (
+                    {/* Reveal Indicator (Icon) */}
+                    {isRevealed && (
+                       <div className="absolute top-2 right-2 z-10">
+                         <div className="bg-amber-900/80 text-amber-200 rounded-full p-1 border border-amber-500 shadow-lg">
+                           <Icons.Lock size={12} />
+                         </div>
+                       </div>
+                    )}
+
+                    {/* Player Name Badge (Hidden if Revealed icon is there, or moved?) -> Keep layout clean, move badge down if needed or just left aligned */}
+                    {char.playerName && !isRevealed && (
                        <div className="absolute top-2 right-2 z-10 max-w-[70%]">
                           <span className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border truncate ${badgeStyle}`}>
                              <Icons.User size={8} className="shrink-0" fill="currentColor" />
@@ -276,6 +370,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                        </div>
                     )}
 
+                    {/* Secret File Indicator */}
                     {char.extraFiles.length > 0 && (
                        <div className="absolute bottom-2 right-2">
                          <Icons.Folder size={16} className={`drop-shadow-md ${activePortrait ? 'text-yellow-400' : theme.classes.textSub}`} fill="currentColor" />
@@ -284,11 +379,46 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                   </div>
 
                   {/* Info */}
-                  <div className="p-3 flex flex-col gap-1 relative">
-                     <h3 className={`font-bold truncate transition-colors group-hover:opacity-80 text-sm md:text-base ${theme.classes.textMain}`}>{char.name}</h3>
-                     <p className={`text-xs truncate min-h-[1rem] ${theme.classes.textSub}`}>
-                       {subInfo || '-'}
-                     </p>
+                  <div className={`p-3 flex flex-col relative flex-1 ${isRevealed ? 'bg-amber-950/10' : ''}`}>
+                     <div className="flex justify-between items-start mb-1">
+                       <div className="flex-1 min-w-0">
+                         <h3 className={`font-bold truncate transition-colors group-hover:opacity-80 text-sm md:text-base ${isRevealed ? 'text-amber-400' : theme.classes.textMain}`}>
+                           {nameToDisplay}
+                         </h3>
+                         {subName && (
+                           <div className={`text-[10px] truncate ${theme.classes.textSub} ${char.isNameBlurred && !isRevealed && !isNameRevealed ? 'blur-[2px] select-none hover:blur-none transition-all' : ''}`}>
+                             {subName}
+                           </div>
+                         )}
+                       </div>
+                     </div>
+                     
+                     <div className="flex items-center justify-between mb-2">
+                       <p className={`text-xs truncate font-medium ${theme.classes.textSub}`}>
+                         {roleInfo || 'Unassigned'}
+                       </p>
+                       
+                       {/* Visual Power Tier Gauge (2-Level Steps) */}
+                       {powerVisuals && (
+                         <div className={`flex gap-0.5 items-center ${powerVisuals.effectClass}`} title="Power Level">
+                            {[1, 2, 3, 4, 5].map(step => (
+                              <div 
+                                key={step} 
+                                className={`w-1.5 h-1.5 rotate-45 border ${step <= powerVisuals.count ? `${powerVisuals.colorClass} bg-current border-current` : `border-stone-600 bg-transparent`}`}
+                              />
+                            ))}
+                         </div>
+                       )}
+                     </div>
+
+                     {/* Character Quote / Summary */}
+                     {summaryToDisplay && (
+                        <div className="mt-auto pt-2 border-t border-dashed border-white/10">
+                          <p className={`text-[11px] italic line-clamp-2 leading-tight opacity-70 ${isRevealed ? 'text-amber-200' : theme.classes.textMain}`}>
+                            "{summaryToDisplay}"
+                          </p>
+                        </div>
+                     )}
                   </div>
                 </div>
               );

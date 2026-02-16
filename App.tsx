@@ -24,6 +24,13 @@ const App: React.FC = () => {
   const [activeCharacterId, setActiveCharacterId] = useState<string | null>(null); 
   const [isCreatingCharacter, setIsCreatingCharacter] = useState(false);
 
+  // 진상(Truth) 모드 상태 관리
+  const [revealedCharacterIds, setRevealedCharacterIds] = useState<Set<string>>(new Set());
+  const [isGlobalReveal, setIsGlobalReveal] = useState(false);
+
+  // 이름 블러 해제 상태 관리 (New)
+  const [nameRevealedIds, setNameRevealedIds] = useState<Set<string>>(new Set());
+
   // 모달 상태
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsStartTab, setSettingsStartTab] = useState<'GLOBAL' | 'CAMPAIGN'>('GLOBAL');
@@ -43,8 +50,6 @@ const App: React.FC = () => {
     const connectionError = await checkDatabaseConnection();
     if (connectionError) {
       console.error("DB Connection Error:", connectionError);
-      // PGRST205: Relation not found (테이블 없음)
-      // 42P01: Postgres undefined table
       if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || connectionError.message.includes('not find the table')) {
         setDbError(connectionError.message);
         setLoading(false);
@@ -62,18 +67,16 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // 에러 화면 (DB 미설정 등)
+  // 에러 화면
   if (dbError) {
     return <DatabaseSetup onRetry={init} errorMsg={dbError} />;
   }
 
-  // 로딩 중 표시 (테마 적용)
+  // 로딩 중 표시
   if (loading || !data) {
     return (
       <div className="min-h-screen bg-[#1c1917] flex flex-col items-center justify-center text-stone-200 gap-6 relative overflow-hidden">
-        {/* Background Effects */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-900/20 via-stone-950/80 to-black pointer-events-none" />
-        
         <div className="relative z-10 flex flex-col items-center">
           <div className="w-16 h-16 mb-4 text-amber-600 animate-pulse">
              <Icons.Ship size={64} strokeWidth={1} />
@@ -93,17 +96,11 @@ const App: React.FC = () => {
 
   // --- 액션 핸들러 ---
   
-  // 에러 헬퍼
   const handleError = (e: any, defaultMsg: string) => {
     console.error(e);
     const msg = e instanceof Error ? e.message : JSON.stringify(e);
     const code = (e as any)?.code;
 
-    // 테이블 또는 컬럼 없음 에러 발생 시 초기화 화면으로 유도
-    // PGRST204: Column not found (스키마 불일치)
-    // PGRST205: Relation not found
-    // 42P01: Undefined table
-    // 42703: Undefined column
     if (
       code === 'PGRST204' || 
       code === 'PGRST205' || 
@@ -111,7 +108,7 @@ const App: React.FC = () => {
       code === '42703' ||
       msg.includes('does not exist') || 
       msg.includes('not find the table') ||
-      msg.includes('not find the') // Matches "Could not find the 'font' column"
+      msg.includes('not find the') 
     ) {
        setDbError(`${defaultMsg}\n(데이터베이스 스키마 업데이트가 필요합니다. 아래 2번 업데이트 쿼리를 실행하세요)\n\n상세 에러: ${msg}`);
        return;
@@ -124,6 +121,10 @@ const App: React.FC = () => {
   const goToCampaign = (id: string) => {
     setActiveCampaignId(id);
     setCurrentView('CAMPAIGN');
+    // 캠페인 진입 시 진상 상태 초기화 (원하면 주석 처리)
+    setRevealedCharacterIds(new Set());
+    setNameRevealedIds(new Set()); // 이름 블러 해제 초기화
+    setIsGlobalReveal(false);
   };
 
   const goHome = () => {
@@ -131,13 +132,38 @@ const App: React.FC = () => {
     setCurrentView('HOME');
   };
 
+  // Truth Reveal Handlers
+  const toggleCharacterReveal = (id: string, forceState?: boolean) => {
+    setRevealedCharacterIds(prev => {
+      const next = new Set(prev);
+      const shouldReveal = forceState !== undefined ? forceState : !next.has(id);
+      
+      if (shouldReveal) next.add(id);
+      else next.delete(id);
+      
+      return next;
+    });
+  };
+
+  const toggleGlobalReveal = () => {
+    setIsGlobalReveal(prev => !prev);
+  };
+
+  // Name Blur Reveal Handlers
+  const toggleNameReveal = (id: string, forceState?: boolean) => {
+    setNameRevealedIds(prev => {
+      const next = new Set(prev);
+      const shouldReveal = forceState !== undefined ? forceState : !next.has(id);
+      if (shouldReveal) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
   // 캐릭터 CRUD
   const saveCharacter = async (char: Character) => {
     try {
-      // 1. DB 업데이트
       await dbSaveCharacter(char);
-      
-      // 2. 로컬 상태 업데이트 (화면 즉시 반영)
       setData(prev => {
         if (!prev) return null;
         const existingIdx = prev.characters.findIndex(c => c.id === char.id);
@@ -150,8 +176,8 @@ const App: React.FC = () => {
         }
         return { ...prev, characters: newChars };
       });
-      setActiveCharacterId(null);
-      setIsCreatingCharacter(false);
+      // 저장 후 창을 닫지 않거나, 닫는 로직은 CharacterDetail 내부에서 처리
+      // setActiveCharacterId(null); // (CharacterDetail에서 처리)
     } catch (e) {
       handleError(e, "캐릭터 저장 중 오류가 발생했습니다.");
     }
@@ -268,7 +294,6 @@ const App: React.FC = () => {
     });
   };
 
-  // 글로벌 설정 (배경 등) - 기능은 유지하되 UI에서 제거됨
   const updateGlobalBackgrounds = async (bgs: string[]) => {
     if (!data) return;
     try {
@@ -292,13 +317,10 @@ const App: React.FC = () => {
     ? data.characters.find(c => c.id === activeCharacterId)
     : null;
 
-  // Determine Theme
   const activeTheme = activeCampaign?.theme ? THEMES[activeCampaign.theme] : THEMES[THEME_KEYS.ADVENTURE];
 
   return (
-    <Layout 
-      themeClasses={activeCampaign ? activeTheme.classes : undefined}
-    >
+    <Layout themeClasses={activeCampaign ? activeTheme.classes : undefined}>
       {currentView === 'HOME' && (
         <MainDashboard 
           campaigns={data.campaigns}
@@ -324,10 +346,15 @@ const App: React.FC = () => {
             setSettingsStartTab('CAMPAIGN');
             setIsSettingsOpen(true);
           }}
+          // Pass Truth Reveal State
+          revealedCharacterIds={revealedCharacterIds}
+          isGlobalReveal={isGlobalReveal}
+          onToggleGlobalReveal={toggleGlobalReveal}
+          // Pass Name Blur State
+          nameRevealedIds={nameRevealedIds}
         />
       )}
 
-      {/* 캐릭터 상세 / 편집 모달 */}
       {(activeCharacterId || isCreatingCharacter) && activeCampaign && (
         <CharacterDetail 
           character={activeCharacter || null}
@@ -339,13 +366,18 @@ const App: React.FC = () => {
             setActiveCharacterId(null);
             setIsCreatingCharacter(false);
           }}
-          // Comment handlers
           onAddComment={handleAddComment}
           onDeleteComment={handleDeleteComment}
+          // Pass Truth Reveal State
+          isGlobalReveal={isGlobalReveal}
+          isRevealed={activeCharacterId ? revealedCharacterIds.has(activeCharacterId) : false}
+          onToggleReveal={(id, state) => toggleCharacterReveal(id, state)}
+          // Pass Name Blur State
+          isNameRevealed={activeCharacterId ? nameRevealedIds.has(activeCharacterId) : false}
+          onToggleNameReveal={(id, state) => toggleNameReveal(id, state)}
         />
       )}
 
-      {/* 설정 모달 */}
       <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -358,7 +390,6 @@ const App: React.FC = () => {
         onUpdateGlobalBackgrounds={updateGlobalBackgrounds}
       />
 
-      {/* 비밀번호 확인 모달 */}
       <PasswordModal 
         isOpen={passwordModal.isOpen}
         onClose={() => setPasswordModal(p => ({ ...p, isOpen: false }))}

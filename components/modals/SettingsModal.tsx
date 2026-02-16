@@ -34,12 +34,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!newCampName) return;
     
     let subTitle = 'New Campaign';
+    let defaultAliasLabel = '이명/칭호';
+
     switch (newCampSys) {
-      case SystemType.DND5E: subTitle = 'Dungeons & Dragons 5th Ed'; break;
-      case SystemType.CYBERPUNK_RED: subTitle = 'Cyberpunk RED'; break;
-      case SystemType.COC7: subTitle = 'Call of Cthulhu 7th Ed'; break;
-      case SystemType.BAND_OF_BLADES: subTitle = 'Band of Blades'; break;
-      default: subTitle = 'Custom Rule Campaign';
+      case SystemType.DND5E: 
+        subTitle = 'Dungeons & Dragons 5th Ed'; 
+        defaultAliasLabel = '이명 (Alias)';
+        break;
+      case SystemType.CYBERPUNK_RED: 
+        subTitle = 'Cyberpunk RED'; 
+        defaultAliasLabel = '핸들 (Handle)';
+        break;
+      case SystemType.COC7: 
+        subTitle = 'Call of Cthulhu 7th Ed'; 
+        defaultAliasLabel = '칭호 (Title)';
+        break;
+      case SystemType.BAND_OF_BLADES: 
+        subTitle = 'Band of Blades'; 
+        defaultAliasLabel = '코드네임 (Codename)';
+        break;
+      default: 
+        subTitle = 'Custom Rule Campaign';
     }
 
     const newCamp: Campaign = {
@@ -47,7 +62,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       name: newCampName,
       system: newCampSys,
       backgroundImages: [],
-      subTitle: subTitle
+      subTitle: subTitle,
+      aliasLabel: defaultAliasLabel
     };
     onAddCampaign(newCamp);
     setIsCreating(false);
@@ -164,7 +180,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           <input 
                             value={selectedCampaign.name}
                             onChange={(e) => onUpdateCampaign({...selectedCampaign, name: e.target.value})}
-                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-200 focus:outline-none focus:border-amber-500 transition-colors font-serif text-lg"
+                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-200 focus:outline-none focus:border-amber-500 transition-colors font-serif text-lg mb-4"
+                          />
+
+                          <label className="text-xs font-bold text-stone-500 block mb-1 uppercase tracking-wider">이명/칭호 항목명 (Alias Label)</label>
+                          <input 
+                            value={selectedCampaign.aliasLabel || ''}
+                            onChange={(e) => onUpdateCampaign({...selectedCampaign, aliasLabel: e.target.value})}
+                            className="w-full bg-stone-800/50 border-b border-stone-600 p-2 text-stone-300 focus:outline-none focus:border-amber-500 mb-2 font-mono text-sm"
+                            placeholder="예: 핸들, 코드네임, 호, 이명 등"
                           />
                           
                           <p className="text-xs text-stone-600 mt-4 flex items-center gap-2">

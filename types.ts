@@ -15,7 +15,7 @@ export interface ExtraFile {
   content: string;
   imageUrl?: string; // Image support for secrets/clues
   useAsPortrait?: boolean; // If true, this image overrides the main character portrait
-  isSecret?: boolean; // If true, content is hidden until revealed
+  isSecret?: boolean; // Legacy field (still useful for hiding individual items in public mode)
 }
 
 export interface CharacterComment {
@@ -28,9 +28,10 @@ export interface CharacterComment {
   createdAt: number;
 }
 
-// New: Secret Profile Structure
+// Secret Profile Structure (Expanded)
 export interface SecretProfile {
-  name?: string;
+  name?: string; // Secret Name / Real Name when revealed
+  alias?: string; // New: Secret Alias
   image_url?: string;
   summary?: string;
   description?: string;
@@ -39,29 +40,39 @@ export interface SecretProfile {
   height?: string;
   weight?: string;
   appearance?: string;
-  realName?: string;
+  realName?: string; // Legacy field support
+  
+  // New: Secret Mode specific data
+  levelOrExp?: string; 
+  extraFiles?: ExtraFile[]; // Separate list for secret mode
+  comments?: CharacterComment[]; // Separate list for secret mode
 }
 
 export interface Character {
   id: string;
   campaignId: string;
-  name: string; // Used as "Handle" in Cyberpunk
-  realName?: string; // New: Real Name / Secret Identity
-  playerName?: string; // New: Player Name (Member or Guest)
+  name: string; 
+  
+  // New: Universal Alias System
+  alias?: string; // 이명, 칭호, 핸들 등
+  isNameBlurred?: boolean; // 이명 존재 시 본명 블러 처리 여부
+
+  realName?: string; // Legacy: Can be used as subtitle or secondary name
+  playerName?: string; 
   isNpc: boolean;
-  imageUrl?: string; // Base64 or URL
+  imageUrl?: string; 
   imageFit: 'cover' | 'contain';
-  summary: string; // One line summary
-  description?: string; // Detailed bio
+  summary: string; 
+  description?: string; 
   
   // New Physical/Bio Fields
   age?: string;
   gender?: string;
   height?: string;
   weight?: string;
-  appearance?: string; // Short visual description
+  appearance?: string; 
 
-  levelOrExp?: string; // Level, Rank, Age, etc.
+  levelOrExp?: string; 
 
   // DnD Specific
   dndClass?: string;
@@ -72,14 +83,14 @@ export interface Character {
   cpredOrigin?: string;
 
   // Other / Custom System Specific
-  customClass?: string;    // Main Role/Class/Job
-  customSubclass?: string; // Sub Role/Race/Origin
+  customClass?: string;    
+  customSubclass?: string; 
   
   // Common Extra Fields
   extraFiles: ExtraFile[];
-  comments: CharacterComment[]; // Added Comments
+  comments: CharacterComment[]; 
   
-  // New: Secret Profile Object (Hidden by default)
+  // Secret Profile Object (Hidden by default)
   secretProfile?: SecretProfile;
 
   updatedAt: number;
@@ -90,17 +101,20 @@ export interface Campaign {
   name: string;
   subTitle?: string;
   system: SystemType;
-  logoUrl?: string; // Base64 or URL
-  backgroundImages: string[]; // Array of Base64 or URLs
+  logoUrl?: string; 
+  backgroundImages: string[]; 
   description?: string;
-  theme?: string; // New: UI Theme Key
+  theme?: string; 
+  
+  // New: Custom Label for "Alias" field (e.g., "Handle", "Code Name")
+  aliasLabel?: string;
 }
 
 export interface AppState {
   campaigns: Campaign[];
   characters: Character[];
   globalBackgrounds: string[];
-  password: string; // Ideally hashed, but raw for this demo
+  password: string; 
 }
 
 // DnD Class Constants
@@ -150,15 +164,15 @@ export const BOB_PLAYBOOKS = [
 export interface ThemeConfig {
   name: string;
   classes: {
-    bgMain: string;       // Main container background (usually transparent/glass)
-    bgPanel: string;      // Panel/Card background
-    textMain: string;     // Primary Text
-    textSub: string;      // Secondary Text
-    textAccent: string;   // Highlight/Link Text
-    border: string;       // Border color
-    buttonPrimary: string;// Primary Button
-    buttonSecondary: string; // Secondary/Icon Button
-    font?: string;        // Optional font family utility
-    overlay?: string;     // Optional overlay for atmosphere
+    bgMain: string;       
+    bgPanel: string;      
+    textMain: string;     
+    textSub: string;      
+    textAccent: string;   
+    border: string;       
+    buttonPrimary: string;
+    buttonSecondary: string; 
+    font?: string;        
+    overlay?: string;     
   };
 }

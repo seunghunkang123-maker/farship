@@ -26,7 +26,8 @@ create table if not exists campaigns (
   logo_url text,
   background_images text[] default '{}',
   description text,
-  theme text default 'ADVENTURE', -- New Theme Column
+  theme text default 'ADVENTURE',
+  alias_label text, -- New: 이명 항목 이름 (예: 핸들, 코드네임)
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -35,6 +36,9 @@ create table if not exists characters (
   id uuid primary key default uuid_generate_v4(),
   campaign_id uuid references campaigns(id) on delete cascade,
   name text not null,
+  alias text, -- New: 이명/칭호
+  is_name_blurred boolean default false, -- New: 이명 존재 시 본명 가림 여부
+  
   real_name text,
   player_name text,
   is_npc boolean default false,
@@ -58,7 +62,7 @@ create table if not exists characters (
   custom_class text,
   custom_subclass text,
   
-  secret_profile jsonb, -- New: Secret Profile Object
+  secret_profile jsonb, 
 
   updated_at bigint default extract(epoch from now()) * 1000
 );
@@ -113,30 +117,41 @@ NOTIFY pgrst, 'reload config';
 `;
 
 const UPDATE_SQL = `
--- characters 테이블에 secret_profile(JSONB) 컬럼이 없으면 추가
+-- 기존 업데이트 (1.2)
 do $$
 begin
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='secret_profile') then
     alter table characters add column secret_profile jsonb;
   end if;
-end $$;
-
--- 2. 기존 컬럼들 확인 (이전 업데이트 미적용자 대비)
-do $$
-begin
-  -- Player Name
+  
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='player_name') then
     alter table characters add column player_name text;
   end if;
   
-  -- Level or Exp
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='level_or_exp') then
     alter table characters add column level_or_exp text;
   end if;
   
-  -- Comments Font
   if not exists (select 1 from information_schema.columns where table_name='character_comments' and column_name='font') then
     alter table character_comments add column font text;
+  end if;
+end $$;
+
+-- 신규 업데이트 (1.3: Alias/Blur)
+do $$
+begin
+  -- Campaigns: Alias Label
+  if not exists (select 1 from information_schema.columns where table_name='campaigns' and column_name='alias_label') then
+    alter table campaigns add column alias_label text;
+  end if;
+
+  -- Characters: Alias, Blur
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='alias') then
+    alter table characters add column alias text;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='is_name_blurred') then
+    alter table characters add column is_name_blurred boolean default false;
   end if;
 end $$;
 
@@ -191,7 +206,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
               </button>
             </h3>
             <p className="text-xs text-slate-400 mb-2 font-bold text-amber-200">
-              '비밀 프로필' 기능을 위해 DB 업데이트가 필요합니다.
+              '이명(Alias)/진상 모드 확장' 기능을 위해 DB 업데이트가 필요합니다.
             </p>
             <pre className="text-xs text-slate-400 overflow-auto max-h-40 custom-scrollbar p-2 bg-black/30 rounded">
               {UPDATE_SQL}
