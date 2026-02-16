@@ -28,6 +28,15 @@ export interface CharacterComment {
   createdAt: number;
 }
 
+// New: Affiliation Structure
+export interface CharacterAffiliation {
+  id: string;
+  name: string;
+  rank?: string; // Optional Rank/Position
+  isStrikethrough?: boolean; // 취소선 여부 (탈퇴, 전직 등 표현)
+  isHidden?: boolean; // New: 숨김 여부 (비밀 모드에서 공개 태그를 가리기 위함)
+}
+
 // Secret Profile Structure (Expanded)
 export interface SecretProfile {
   name?: string; // Secret Name / Real Name when revealed
@@ -43,7 +52,8 @@ export interface SecretProfile {
   realName?: string; // Legacy field support
   
   // New: Secret Mode specific data
-  levelOrExp?: string; 
+  levelOrExp?: string;
+  affiliations?: CharacterAffiliation[]; // Secret Affiliations 
   extraFiles?: ExtraFile[]; // Separate list for secret mode
   comments?: CharacterComment[]; // Separate list for secret mode
 }
@@ -73,6 +83,9 @@ export interface Character {
   appearance?: string; 
 
   levelOrExp?: string; 
+  
+  // New: Affiliations (Groups/Organizations)
+  affiliations?: CharacterAffiliation[];
 
   // DnD Specific
   dndClass?: string;

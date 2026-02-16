@@ -1,5 +1,5 @@
 
-import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType } from '../types';
+import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType, CharacterAffiliation } from '../types';
 import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
 
@@ -20,6 +20,9 @@ interface DbCharacter {
   description: string | null;
   level_or_exp: string | null;
   
+  // New: Affiliations (Stored as JSONB)
+  affiliations: CharacterAffiliation[] | null;
+
   // Bio Fields
   age: string | null;
   gender: string | null;
@@ -171,6 +174,8 @@ export const loadFullState = async (): Promise<AppState> => {
         description: c.description || undefined,
         levelOrExp: c.level_or_exp || undefined,
         
+        affiliations: c.affiliations || [], // New
+
         // Bio Fields
         age: c.age || undefined,
         gender: c.gender || undefined,
@@ -278,6 +283,8 @@ export const saveCharacter = async (char: Character) => {
     description: toDbValue(char.description),
     level_or_exp: toDbValue(char.levelOrExp),
     
+    affiliations: char.affiliations && char.affiliations.length > 0 ? char.affiliations : null, // New
+
     // Bio Fields
     age: toDbValue(char.age),
     gender: toDbValue(char.gender),

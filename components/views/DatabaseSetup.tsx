@@ -47,6 +47,7 @@ create table if not exists characters (
   summary text,
   description text,
   level_or_exp text,
+  affiliations jsonb, -- New: 소속 및 계급 (JSON Array)
   
   -- Bio Fields --
   age text,
@@ -153,6 +154,11 @@ begin
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='is_name_blurred') then
     alter table characters add column is_name_blurred boolean default false;
   end if;
+  
+  -- Characters: Affiliations (New)
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='affiliations') then
+    alter table characters add column affiliations jsonb;
+  end if;
 end $$;
 
 
@@ -206,7 +212,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
               </button>
             </h3>
             <p className="text-xs text-slate-400 mb-2 font-bold text-amber-200">
-              '이명(Alias)/진상 모드 확장' 기능을 위해 DB 업데이트가 필요합니다.
+              '소속/이명/진상 모드 확장' 기능을 위해 DB 업데이트가 필요합니다.
             </p>
             <pre className="text-xs text-slate-400 overflow-auto max-h-40 custom-scrollbar p-2 bg-black/30 rounded">
               {UPDATE_SQL}

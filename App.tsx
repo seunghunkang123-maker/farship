@@ -146,6 +146,9 @@ const App: React.FC = () => {
   };
 
   const toggleGlobalReveal = () => {
+    // When toggling Global Reveal, we reset individual reveals to ensure consistent state
+    // This solves the issue where manually revealed chars stay revealed even after toggling Global OFF
+    setRevealedCharacterIds(new Set());
     setIsGlobalReveal(prev => !prev);
   };
 

@@ -89,8 +89,8 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'PC' | 'NPC'>('ALL');
-  const [classFilter, setClassFilter] = useState<string>('ALL');
   const [sortOrder, setSortOrder] = useState<'NAME' | 'RECENT'>('RECENT');
+  const [showTags, setShowTags] = useState(false); // 태그 보이기 토글 상태
   
   // Theme State
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -108,28 +108,26 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   };
 
   const filteredChars = useMemo(() => {
+    const term = searchTerm.toLowerCase();
     return characters
       .filter((c) => {
-        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              (c.alias && c.alias.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                              (c.customClass && c.customClass.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                              (c.playerName && c.playerName.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesSearch = c.name.toLowerCase().includes(term) || 
+                              (c.alias && c.alias.toLowerCase().includes(term)) ||
+                              (c.customClass && c.customClass.toLowerCase().includes(term)) ||
+                              (c.playerName && c.playerName.toLowerCase().includes(term)) ||
+                              (c.affiliations && c.affiliations.some(a => a.name.toLowerCase().includes(term) || (a.rank && a.rank.toLowerCase().includes(term))));
         
         const matchesType = typeFilter === 'ALL' 
           ? true 
           : typeFilter === 'PC' ? !c.isNpc : c.isNpc;
         
-        const matchesClass = classFilter === 'ALL' 
-          ? true 
-          : c.dndClass === classFilter;
-
-        return matchesSearch && matchesType && matchesClass;
+        return matchesSearch && matchesType;
       })
       .sort((a, b) => {
         if (sortOrder === 'NAME') return a.name.localeCompare(b.name);
         return b.updatedAt - a.updatedAt;
       });
-  }, [characters, searchTerm, typeFilter, classFilter, sortOrder]);
+  }, [characters, searchTerm, typeFilter, sortOrder]);
 
   return (
     <div className={`flex flex-col h-full transition-colors duration-500 ${theme.classes.bgMain} ${theme.classes.font || ''}`}>
@@ -194,6 +192,16 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
             <span className="hidden md:inline">{isGlobalReveal ? '진상 모드 ON' : '진상 일괄 전환'}</span>
           </button>
 
+          {/* Show Tags Toggle */}
+          <button 
+            onClick={() => setShowTags(!showTags)}
+            className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-all shadow-lg border ${showTags ? 'bg-stone-700 text-stone-200 border-stone-500' : `${theme.classes.buttonSecondary} border-transparent bg-black/20`}`}
+            title="캐릭터 카드에 태그를 표시합니다"
+          >
+            <Icons.Tag size={18} className={showTags ? "text-white" : ""} />
+            <span className="hidden md:inline">{showTags ? '태그 숨기기' : '태그 보이기'}</span>
+          </button>
+
           <button 
             onClick={onAddCharacter}
             className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-colors shadow-lg ${theme.classes.buttonPrimary}`}
@@ -214,7 +222,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
           <Icons.Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${theme.classes.textSub}`} size={16} />
           <input 
             type="text"
-            placeholder="이름, 칭호, 클래스, 플레이어 검색..."
+            placeholder="이름, 칭호, 소속, 플레이어 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={`w-full bg-transparent border rounded-full py-1.5 pl-10 pr-4 text-sm focus:outline-none transition-colors ${theme.classes.textMain} ${theme.classes.border} focus:border-opacity-100 placeholder:opacity-50`}
@@ -232,19 +240,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
              <option value="PC" className="bg-slate-800 text-slate-200">PC (플레이어)</option>
              <option value="NPC" className="bg-slate-800 text-slate-200">NPC</option>
            </select>
-
-           {campaign.system === SystemType.DND5E && (
-             <select 
-                value={classFilter} 
-                onChange={(e) => setClassFilter(e.target.value)}
-                className={`bg-transparent border-none text-sm rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-opacity-50 max-w-[120px] md:max-w-[150px] ${theme.classes.textMain}`}
-             >
-               <option value="ALL" className="bg-slate-800 text-slate-200">모든 클래스</option>
-               {DND_CLASSES.map(cls => (
-                 <option key={cls.value} value={cls.value} className="bg-slate-800 text-slate-200">{cls.label.split(' ')[0]}</option>
-               ))}
-             </select>
-           )}
 
            <div className={`h-4 w-px mx-1 opacity-30 ${theme.classes.textSub} bg-current`} />
 
@@ -274,7 +269,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                const isNameRevealed = nameRevealedIds.has(char.id);
 
                // Resolve Display Values based on Reveal State
-               // Logic Updated: Prefer Secret Alias -> Secret Name -> Public Alias -> Public Name
                let nameToDisplay = char.name;
                let subName: string | null = null;
 
@@ -282,12 +276,11 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                   // Secret Mode Logic
                   if (char.secretProfile?.alias) {
                      nameToDisplay = char.secretProfile.alias;
-                     subName = char.secretProfile.name || char.alias || char.name; // Fallback to other names for subtitle
+                     subName = char.secretProfile.name || char.alias || char.name;
                   } else if (char.secretProfile?.name) {
                      nameToDisplay = char.secretProfile.name;
                      subName = char.alias || char.name;
                   } else {
-                     // Fallback if secret profile has no name
                      nameToDisplay = char.alias || char.name;
                      subName = char.alias ? char.name : null;
                   }
@@ -299,6 +292,22 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
                const summaryToDisplay = isRevealed ? (char.secretProfile?.summary || char.summary) : char.summary;
                const levelToDisplay = isRevealed ? (char.secretProfile?.levelOrExp || char.levelOrExp) : char.levelOrExp;
+
+               // Tag Logic
+               const displayTags = (() => {
+                  const publicAffs = char.affiliations || [];
+                  const secretAffs = char.secretProfile?.affiliations || [];
+
+                  if (!isRevealed) return publicAffs;
+
+                  // Merge logic for Revealed Mode
+                  const secretMap = new Map(secretAffs.map(a => [a.name, a]));
+                  const merged = [...secretAffs];
+                  publicAffs.forEach(pa => {
+                      if (!secretMap.has(pa.name)) merged.push(pa);
+                  });
+                  return merged.filter(a => !a.isHidden);
+               })();
 
                // Class/Role Info
                let roleInfo = '';
@@ -312,8 +321,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                const powerVisuals = getPowerVisuals(campaign.system, levelToDisplay, theme.classes.textAccent);
 
                // Image Logic
-               // Check for extra files used as portrait (priority)
-               // In secret mode, we also look for secret profile image
                const activePortrait = char.extraFiles.find(f => f.useAsPortrait && f.imageUrl && (!f.isSecret || isRevealed));
                let displayImg = activePortrait ? activePortrait.imageUrl : char.imageUrl;
                if (isRevealed && char.secretProfile?.image_url) displayImg = char.secretProfile.image_url;
@@ -360,7 +367,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                        </div>
                     )}
 
-                    {/* Player Name Badge (Hidden if Revealed icon is there, or moved?) -> Keep layout clean, move badge down if needed or just left aligned */}
+                    {/* Player Name Badge */}
                     {char.playerName && !isRevealed && (
                        <div className="absolute top-2 right-2 z-10 max-w-[70%]">
                           <span className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border truncate ${badgeStyle}`}>
@@ -417,6 +424,26 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                           <p className={`text-[11px] italic line-clamp-2 leading-tight opacity-70 ${isRevealed ? 'text-amber-200' : theme.classes.textMain}`}>
                             "{summaryToDisplay}"
                           </p>
+                        </div>
+                     )}
+
+                     {/* Tags List (Toggleable) */}
+                     {showTags && displayTags.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-dashed border-white/10 flex flex-wrap gap-1.5">
+                           {displayTags.map(tag => {
+                              const isPublicRef = (char.affiliations || []).some(pa => pa.name === tag.name);
+                              const isSecretStyle = !isPublicRef && isRevealed;
+                              
+                              return (
+                                 <span 
+                                    key={tag.id} 
+                                    className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${tag.isStrikethrough ? 'line-through opacity-50' : ''} ${isSecretStyle ? 'bg-amber-900/40 text-amber-100 border-amber-600/50' : `bg-black/20 ${theme.classes.textSub} ${theme.classes.border}`}`}
+                                 >
+                                    {tag.name}
+                                    {tag.rank && <span className="opacity-60 ml-1">| {tag.rank}</span>}
+                                 </span>
+                              );
+                           })}
                         </div>
                      )}
                   </div>

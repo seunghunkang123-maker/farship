@@ -1,3 +1,4 @@
+
 import { 
   Settings, 
   Plus, 
@@ -21,7 +22,11 @@ import {
   Anchor,
   Clover,
   Infinity as InfinityIcon,
-  Waves
+  Waves,
+  Strikethrough,
+  Eye,
+  EyeOff,
+  Tag
 } from 'lucide-react';
 
 export const Icons = {
@@ -47,5 +52,9 @@ export const Icons = {
   Anchor,
   Clover,
   Infinity: InfinityIcon,
-  Waves
+  Waves,
+  Strikethrough,
+  Eye,
+  EyeOff,
+  Tag
 };

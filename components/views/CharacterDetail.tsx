@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile } from '../../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation } from '../../types';
 import { Icons } from '../ui/Icons';
 import { fileToBase64 } from '../../services/storage';
 import { THEMES, THEME_KEYS } from '../../constants';
@@ -105,6 +105,16 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const [showAliasInput, setShowAliasInput] = useState(false);
   const [showSecretAliasInput, setShowSecretAliasInput] = useState(false);
 
+  // Affiliation Editing State
+  const [newAffiliationName, setNewAffiliationName] = useState('');
+  const [newAffiliationRank, setNewAffiliationRank] = useState('');
+  const [hasRank, setHasRank] = useState(false);
+  
+  // Drag & Drop State
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
   // Comment State
   const [commentName, setCommentName] = useState('관찰자');
   const [commentText, setCommentText] = useState('');
@@ -122,7 +132,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const [formData, setFormData] = useState<Character>({
     id: '', campaignId: campaign.id, name: '', realName: '', playerName: CORE_MEMBERS[0],
     isNpc: false, imageFit: 'cover', summary: '', description: '', extraFiles: [], comments: [],
-    updatedAt: Date.now(), alias: '', isNameBlurred: false,
+    updatedAt: Date.now(), alias: '', isNameBlurred: false, affiliations: []
   });
 
   useEffect(() => {
@@ -141,7 +151,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         dndClass: campaign.system === SystemType.DND5E ? DND_CLASSES[0].value : undefined,
         cpredRole: campaign.system === SystemType.CYBERPUNK_RED ? CPRED_ROLES[0].split(' ')[0] : undefined,
         customClass: campaign.system === SystemType.BAND_OF_BLADES ? BOB_PLAYBOOKS[0].split(' ')[0] : '',
-        alias: '', isNameBlurred: false,
+        alias: '', isNameBlurred: false, affiliations: []
       });
       setIsEditing(true);
       setRevealedIds(new Set());
@@ -153,6 +163,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   }, [character, campaign]);
 
   const handleToggleReveal = () => {
+    // If Global Reveal is ON, individual toggle is disabled (visual logic handles this, but double check)
+    if (isGlobalReveal) return;
     if (onToggleReveal) {
       onToggleReveal(formData.id, !isSecretRevealed);
     }
@@ -190,6 +202,162 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     setFormData(prev => ({ ...prev, secretProfile: { ...(prev.secretProfile || {}), [field]: value } }));
   };
 
+  // Affiliation Logic
+  const addAffiliation = () => {
+    if (!newAffiliationName.trim()) return;
+    const newAff: CharacterAffiliation = {
+      id: crypto.randomUUID(),
+      name: newAffiliationName.trim(),
+      rank: hasRank ? newAffiliationRank.trim() : undefined,
+      isStrikethrough: false,
+      isHidden: false
+    };
+
+    if (editLayer === 'SECRET') {
+      // When adding new tag in Secret Mode, we treat the current view (combined list) as the new state.
+      // But simple add just appends.
+      const currentList = currentAffiliations; // Use the combined list
+      // We must sanitize this list (remove virtual IDs) before saving
+      const cleanList = [...currentList, newAff].map(a => 
+        a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
+      );
+      updateSecretField('affiliations', cleanList);
+    } else {
+      const currentList = formData.affiliations || [];
+      setFormData(prev => ({ ...prev, affiliations: [...currentList, newAff] }));
+    }
+
+    setNewAffiliationName('');
+    setNewAffiliationRank('');
+    setHasRank(false);
+  };
+
+  const removeAffiliation = (index: number, aff: CharacterAffiliation) => {
+    if (editLayer === 'SECRET') {
+      // In Secret Mode, "removing" implies:
+      // 1. If it's a "virtual" (inherited public) tag -> We must "hide" it.
+      // 2. If it's a real secret tag -> We delete it.
+      
+      const currentList = [...currentAffiliations];
+      
+      if (aff.id.startsWith('virtual-')) {
+         // It's a public tag we want to hide.
+         // We must materialize it into the secret profile as HIDDEN.
+         // And materialize all others to preserve order/structure.
+         const newList = currentList.map((a, i) => {
+             if (i === index) return { ...a, id: crypto.randomUUID(), isHidden: true };
+             return a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a;
+         });
+         updateSecretField('affiliations', newList);
+      } else {
+         // It's a real secret tag (either created there or previously materialized).
+         // Just remove it from the list.
+         // But wait! If it matched a public tag name, removing it effectively "un-overrides" it,
+         // causing the public tag to re-appear (ghost) in the next render.
+         // So if it matches a public tag, we must toggle "Hidden" instead of deleting.
+         const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
+         
+         if (isPublicRef) {
+            // It overrides a public tag. To "remove" it visually, we must set isHidden=true.
+            // If it was already isHidden=true (and user is deleting the hidden entry), 
+            // then maybe they want to reset to public state? 
+            // Let's assume click 'X' means "I don't want to see this". So isHidden=true.
+            // If it's ALREADY hidden, maybe we remove the override (reset)? 
+            // Let's implement toggle hidden logic for that.
+            // Here, 'X' button usually means delete.
+            // Let's say: If it overrides public -> Set Hidden. If already Hidden -> Delete (Reset to public).
+            
+            if (aff.isHidden) {
+               // Deleting a hidden override -> Reset to Public (remove from secret list)
+               const newList = currentList.filter(a => a.id !== aff.id).map(a => 
+                   a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
+               );
+               updateSecretField('affiliations', newList);
+            } else {
+               // Hiding it
+                const newList = currentList.map(a => 
+                   a.id === aff.id ? { ...a, isHidden: true } : 
+                   a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
+               );
+               updateSecretField('affiliations', newList);
+            }
+         } else {
+             // Pure secret tag -> Delete
+             const newList = currentList.filter(a => a.id !== aff.id).map(a => 
+                 a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
+             );
+             updateSecretField('affiliations', newList);
+         }
+      }
+    } else {
+      const currentList = formData.affiliations || [];
+      setFormData(prev => ({ ...prev, affiliations: currentList.filter((_, i) => i !== index) }));
+    }
+  };
+
+  const toggleAffiliationStrikethrough = (index: number, aff: CharacterAffiliation) => {
+    if (editLayer === 'SECRET') {
+        const currentList = [...currentAffiliations];
+        const newList = currentList.map((a, i) => {
+            if (i === index) return { ...a, isStrikethrough: !a.isStrikethrough };
+            return a;
+        }).map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
+        updateSecretField('affiliations', newList);
+    } else {
+      const currentList = formData.affiliations || [];
+      setFormData(prev => ({ ...prev, affiliations: currentList.map((a, i) => i === index ? {...a, isStrikethrough: !a.isStrikethrough} : a) }));
+    }
+  };
+
+  const toggleAffiliationHidden = (index: number, aff: CharacterAffiliation) => {
+    if (editLayer === 'SECRET') {
+        const currentList = [...currentAffiliations];
+        const newList = currentList.map((a, i) => {
+            if (i === index) return { ...a, isHidden: !a.isHidden };
+            return a;
+        }).map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
+        updateSecretField('affiliations', newList);
+    }
+  };
+
+  // Drag & Drop Handlers
+  const handleDragStart = (position: number) => {
+    dragItem.current = position;
+    setDraggingIndex(position);
+  };
+
+  const handleDragEnter = (position: number) => {
+    dragOverItem.current = position;
+  };
+
+  const handleDragEnd = () => {
+    setDraggingIndex(null);
+    const fromIndex = dragItem.current;
+    const toIndex = dragOverItem.current;
+
+    if (fromIndex === null || toIndex === null || fromIndex === toIndex) {
+      dragItem.current = null;
+      dragOverItem.current = null;
+      return;
+    }
+
+    const listCopy = [...currentAffiliations];
+    const item = listCopy[fromIndex];
+    listCopy.splice(fromIndex, 1);
+    listCopy.splice(toIndex, 0, item);
+
+    if (editLayer === 'SECRET') {
+       // Materialize all virtual tags when saving order
+       const cleanList = listCopy.map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
+       updateSecretField('affiliations', cleanList);
+    } else {
+       setFormData(prev => ({ ...prev, affiliations: listCopy }));
+    }
+
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
   const resolveValue = (field: keyof Character, secretField: keyof SecretProfile): string => {
     if (isEditing) {
       if (editLayer === 'SECRET') return (formData.secretProfile?.[secretField] as string) || '';
@@ -202,6 +370,46 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       return (formData[field] as string) || '';
     }
   };
+
+  // Get current Affiliations list for display/edit
+  // Updated Logic: When Viewing OR Editing in Secret Mode, show Combined list.
+  const currentAffiliations = useMemo(() => {
+    const publicAffs = formData.affiliations || [];
+    const secretAffs = formData.secretProfile?.affiliations || [];
+
+    if (editLayer === 'PUBLIC' && isEditing) {
+       return publicAffs; // Normal Edit Mode
+    }
+
+    if ((editLayer === 'SECRET' && isEditing) || (!isEditing && isSecretRevealed)) {
+        // Combined View / Edit
+        // Strategy:
+        // 1. Secret List defines the base order and content.
+        // 2. Public tags NOT present in Secret List (by name) are appended at the end (or implicitly at start if empty).
+        // 3. Since users can reorder, we essentially just need: SecretList + (PublicList - SecretList).
+        
+        const secretMap = new Map(secretAffs.map(a => [a.name, a]));
+        const merged = [...secretAffs];
+        
+        // Append public tags that aren't already overridden/referenced in secret list
+        publicAffs.forEach(pa => {
+            if (!secretMap.has(pa.name)) {
+                // Add as 'virtual' item (ghost)
+                // Use a special ID so we know it's virtual
+                merged.push({ ...pa, id: `virtual-${pa.id}` }); 
+            }
+        });
+        
+        // In View mode, we filter hidden. In Edit mode, we show them (maybe dimmed).
+        if (!isEditing) {
+           return merged.filter(a => !a.isHidden);
+        }
+        return merged;
+    }
+    
+    // Default Public View
+    return publicAffs;
+  }, [formData, isEditing, editLayer, isSecretRevealed]);
 
   const currentFiles = useMemo(() => {
     if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
@@ -476,10 +684,11 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                 <div className="flex justify-center my-4">
                    <button 
                       onClick={handleToggleReveal}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 shadow-xl ${isSecretRevealed ? 'bg-amber-950 text-amber-500 border-amber-600 shadow-amber-900/40' : 'bg-black/40 text-stone-500 border-stone-800 hover:text-stone-300'}`}
+                      disabled={isGlobalReveal}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 shadow-xl ${isGlobalReveal ? 'bg-amber-950/50 text-amber-500/50 border-amber-800/50 cursor-not-allowed' : isSecretRevealed ? 'bg-amber-950 text-amber-500 border-amber-600 shadow-amber-900/40' : 'bg-black/40 text-stone-500 border-stone-800 hover:text-stone-300'}`}
                    >
-                      {isSecretRevealed ? <Icons.Lock size={16} className="text-amber-500" /> : <Icons.Lock size={16} />}
-                      <span className="text-xs font-bold tracking-widest">{isSecretRevealed ? 'TRUTH REVEALED' : 'REVEAL TRUTH'}</span>
+                      {isSecretRevealed ? <Icons.Lock size={16} className={isGlobalReveal ? "text-amber-500/50" : "text-amber-500"} /> : <Icons.Lock size={16} />}
+                      <span className="text-xs font-bold tracking-widest">{isGlobalReveal ? 'GLOBAL REVEAL ACTIVE' : (isSecretRevealed ? 'TRUTH REVEALED' : 'REVEAL TRUTH')}</span>
                    </button>
                 </div>
              )}
@@ -552,7 +761,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'INFO' && (
               <div className="space-y-6 max-w-2xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                  
-                 {/* Identity Section - Consolidated */}
+                 {/* Identity Section */}
                  <div className={`p-4 rounded-lg border bg-black/10 ${tc.border}`}>
                     <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 border-b pb-2 ${tc.border} ${isEditing && editLayer === 'SECRET' ? 'text-amber-500' : tc.textMain}`}>
                        신원 정보 (Identity)
@@ -698,8 +907,107 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                        </div>
                     ) : ( <div className={`text-sm md:text-base p-2 rounded min-h-[2rem] whitespace-pre-wrap ${tc.textMain}`}>{formData.playerName || '-'}</div> )}
                  </div>
+                 
                  <EditableField label="유형" value={formData.isNpc} onChange={(v) => setFormData(p => ({...p, isNpc: v}))} type="toggle" isEditing={isEditing} themeClasses={tc} />
-                 <EditableField label={levelLabel} value={resolveValue('levelOrExp', 'levelOrExp')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('levelOrExp', v) : setFormData(p => ({...p, levelOrExp: v}))} placeholder={levelPlaceholder} isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'}/>
+                 
+                 {/* Level & Affiliations Block */}
+                 <div className="space-y-4">
+                    <EditableField label={levelLabel} value={resolveValue('levelOrExp', 'levelOrExp')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('levelOrExp', v) : setFormData(p => ({...p, levelOrExp: v}))} placeholder={levelPlaceholder} isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'}/>
+                    
+                    {/* Affiliations UI */}
+                    <div className="mb-4">
+                       <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${isEditing && editLayer === 'SECRET' ? 'text-amber-500' : tc.textSub}`}>
+                          소속/태그 (Affiliation/Tag) {isEditing && editLayer === 'SECRET' && <span className="text-[10px] bg-amber-900/50 px-1 rounded ml-1">Secret</span>}
+                       </label>
+                       
+                       {isEditing ? (
+                          <div className="space-y-2">
+                             {/* List of existing in current layer */}
+                             <div className="flex flex-wrap gap-2 mb-2">
+                                {currentAffiliations.map((aff, index) => {
+                                   // Logic to distinguish style in Edit Mode (mainly for Secret Layer)
+                                   // Check if this tag exists in the public list (by name)
+                                   const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
+                                   // Apply Secret style ONLY if it is NOT a public reference (purely secret) AND we are in secret edit mode
+                                   const isSecretStyle = !isPublicRef && editLayer === 'SECRET';
+                                   
+                                   return (
+                                   <div 
+                                      key={aff.id} 
+                                      draggable 
+                                      onDragStart={() => handleDragStart(index)}
+                                      onDragEnter={() => handleDragEnter(index)}
+                                      onDragEnd={handleDragEnd}
+                                      onDragOver={(e) => e.preventDefault()}
+                                      className={`flex items-center gap-2 bg-black/30 border rounded px-2 py-1 text-sm cursor-move transition-all ${draggingIndex === index ? 'opacity-50 scale-95 border-amber-500' : ''} ${isSecretStyle ? 'border-amber-600/50 text-amber-100' : 'border-stone-600'} ${aff.isStrikethrough ? 'line-through opacity-60 text-stone-500' : ''} ${aff.isHidden ? 'opacity-40 border-dashed' : ''}`}
+                                   >
+                                      <span>{aff.name} {aff.rank && <span className="text-xs opacity-60">| {aff.rank}</span>}</span>
+                                      <div className="flex items-center gap-1 ml-1 border-l border-stone-600 pl-1">
+                                         {editLayer === 'SECRET' && (
+                                            <button onClick={() => toggleAffiliationHidden(index, aff)} className={`hover:text-stone-300 p-0.5 rounded ${aff.isHidden ? 'text-stone-400' : 'text-stone-600'}`} title={aff.isHidden ? "숨김 해제" : "비밀 모드에서 숨김"}>
+                                               {aff.isHidden ? <Icons.EyeOff size={12} /> : <Icons.Eye size={12} />}
+                                            </button>
+                                         )}
+                                         <button onClick={() => toggleAffiliationStrikethrough(index, aff)} className={`hover:text-amber-500 p-0.5 rounded ${aff.isStrikethrough ? 'text-amber-600' : 'text-stone-500'}`} title="취소선 토글"><Icons.Strikethrough size={12} /></button>
+                                         <button onClick={() => removeAffiliation(index, aff)} className="hover:text-red-500 p-0.5 rounded text-stone-500" title="삭제"><Icons.Close size={14} /></button>
+                                      </div>
+                                   </div>
+                                   );
+                                })}
+                             </div>
+                             
+                             {/* Add New Input */}
+                             <div className={`p-3 bg-black/20 rounded border ${editLayer === 'SECRET' ? 'border-amber-900/30' : 'border-stone-700/50'}`}>
+                                <div className="flex gap-2 mb-2">
+                                   <input 
+                                      className={`flex-1 bg-transparent border-b text-sm py-1 focus:outline-none focus:border-opacity-100 placeholder:opacity-30 ${editLayer === 'SECRET' ? 'border-amber-600 text-amber-400 placeholder:text-amber-900/50 focus:border-amber-500' : `${tc.border} ${tc.textMain}`}`}
+                                      placeholder="소속/태그 명칭 입력"
+                                      value={newAffiliationName}
+                                      onChange={(e) => setNewAffiliationName(e.target.value)}
+                                   />
+                                   <button onClick={addAffiliation} className={`px-3 py-1 rounded text-xs font-bold ${tc.buttonPrimary}`}>추가</button>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                   <label className="flex items-center gap-2 cursor-pointer">
+                                      <input type="checkbox" checked={hasRank} onChange={(e) => setHasRank(e.target.checked)} className="w-3 h-3 rounded text-amber-600 focus:ring-0" />
+                                      <span className="text-xs text-stone-400">세부 설정</span>
+                                   </label>
+                                   {hasRank && (
+                                      <input 
+                                         className={`flex-1 bg-transparent border-b text-xs py-1 focus:outline-none focus:border-opacity-100 placeholder:opacity-30 animate-in fade-in slide-in-from-left-2 ${editLayer === 'SECRET' ? 'border-amber-600 text-amber-400 placeholder:text-amber-900/50 focus:border-amber-500' : `${tc.border} ${tc.textMain}`}`}
+                                         placeholder="하위종/직위/계급 등 입력"
+                                         value={newAffiliationRank}
+                                         onChange={(e) => setNewAffiliationRank(e.target.value)}
+                                      />
+                                   )}
+                                </div>
+                             </div>
+                          </div>
+                       ) : (
+                          <div className="flex flex-wrap gap-2 min-h-[2rem] items-center">
+                             {currentAffiliations.length > 0 ? (
+                                currentAffiliations.map(aff => {
+                                   // Logic to distinguish style in View Mode
+                                   // If it's a public tag (name matches public list), keep public style.
+                                   // Only strictly secret tags (not present in public) get secret style.
+                                   const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
+                                   const isSecretStyle = (!isPublicRef && (isSecretRevealed || editLayer === 'SECRET'));
+
+                                   return (
+                                   <span key={aff.id} className={`px-3 py-1 rounded-full text-xs font-medium border shadow-sm flex items-center gap-1 transition-all ${aff.isStrikethrough ? 'line-through opacity-50 decoration-2 decoration-red-500/50' : ''} ${isSecretStyle ? 'bg-amber-900/30 text-amber-100 border-amber-600/40' : `${tc.bgPanel} ${tc.border} ${tc.textMain}`}`}>
+                                      {aff.name}
+                                      {aff.rank && <span className="opacity-70 font-light ml-1">{aff.rank}</span>}
+                                   </span>
+                                   );
+                                })
+                             ) : (
+                                <span className="text-sm opacity-30">-</span>
+                             )}
+                          </div>
+                       )}
+                    </div>
+                 </div>
+
                  <div className="grid grid-cols-2 gap-4">
                    <EditableField label="나이" value={resolveValue('age', 'age')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('age', v) : setFormData(p => ({...p, age: v}))} placeholder="예: 25세" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
                    <EditableField label="성별" value={resolveValue('gender', 'gender')} onChange={(v) => editLayer === 'SECRET' ? updateSecretField('gender', v) : setFormData(p => ({...p, gender: v}))} placeholder="예: 남성" isEditing={isEditing} themeClasses={tc} highlight={isEditing && editLayer === 'SECRET'} />
