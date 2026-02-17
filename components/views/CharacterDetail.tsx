@@ -695,28 +695,30 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   }, [isEditing, isSecretRevealed, formData, isNameRevealed]);
   
   return (
-    <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-md flex items-center justify-center p-0 md:p-4 overflow-hidden">
+    <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-md flex justify-center items-start md:items-center p-0 md:p-4 overflow-y-auto md:overflow-hidden">
       <div 
         onClick={(e) => e.stopPropagation()} 
-        className={`w-full h-full md:max-w-7xl md:h-[95vh] md:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border flex flex-col md:flex-row overflow-hidden transition-all duration-500 ${tc.bgMain} ${isSecretRevealed ? 'border-amber-600/50' : tc.border}`}
+        className={`w-full min-h-full md:min-h-0 md:h-[95vh] md:max-w-[95vw] md:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border flex flex-col md:flex-row transition-all duration-500 ${tc.bgMain} ${isSecretRevealed ? 'border-amber-600/50' : tc.border}`}
       >
         
-        {/* Left Column - Portrait & Status */}
-        <div className={`w-full md:w-[350px] p-6 md:p-8 flex flex-col border-r shrink-0 ${tc.bgPanel} ${tc.border} md:overflow-y-auto`}>
+        {/* Left Column - Portrait & Status (Sidebar) */}
+        {/* Changed width to 512px on MD screens to accommodate 512x512 image requirements */}
+        <div className={`w-full md:w-[512px] p-6 md:p-8 flex flex-col border-r shrink-0 ${tc.bgPanel} ${tc.border} md:overflow-y-auto custom-scrollbar`}>
           <div className="flex justify-between md:hidden mb-6">
             <button onClick={onClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
-            <button onClick={handleSave} className="px-4 py-2 bg-amber-700 text-white rounded-lg font-black text-xs">SAVE</button>
+            <button onClick={handleSave} className="px-4 py-2 bg-amber-700 text-white rounded-lg font-black text-xs">저장</button>
           </div>
           
-          <div className={`relative aspect-[3/4] w-full rounded-xl overflow-hidden mb-8 group border-2 shadow-2xl transition-all ${isSecretRevealed ? 'border-amber-500 shadow-amber-900/20' : 'border-stone-800'} bg-stone-900/50`}>
+          {/* Portrait Container: 1:1 Aspect Ratio, Max width 512px, Mobile limited width to avoid screen takeover */}
+          <div className={`relative w-full max-w-[320px] md:max-w-[512px] aspect-square mx-auto rounded-xl overflow-hidden mb-8 group border-2 shadow-2xl transition-all ${isSecretRevealed ? 'border-amber-500 shadow-amber-900/20' : 'border-stone-800'} bg-stone-900/50`}>
             {displayImageUrl ? (
-              <img src={displayImageUrl} alt={formData.name} className={`w-full h-full transition-transform duration-1000 group-hover:scale-110 ${formData.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+              <img src={displayImageUrl} alt={formData.name} className={`w-full h-full object-top transition-transform duration-1000 group-hover:scale-110 ${formData.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
             ) : <div className={`w-full h-full flex items-center justify-center opacity-10 ${tc.textSub}`}><Icons.User size={100} strokeWidth={1} /></div>}
             
             {isEditing && (
                <label className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-all duration-300">
                   <div className="w-12 h-12 bg-amber-500 rounded-full flex items-center justify-center text-black mb-2 shadow-lg"><Icons.Upload size={24} /></div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white">Update Portrait</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white">이미지 업데이트</span>
                   <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, editLayer)} />
                </label>
             )}
@@ -728,11 +730,22 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             )}
           </div>
           
-          {isEditing && formData.imageUrl && !activePortraitFile && (
-             <div className="flex justify-center gap-2 mb-4 bg-black/20 p-1 rounded-lg w-fit mx-auto">
-               <button onClick={() => setFormData(p => ({...p, imageFit: 'cover'}))} className={`px-3 py-1 text-[10px] font-bold rounded uppercase ${formData.imageFit==='cover' ? 'bg-stone-700 text-white shadow-sm' : 'text-stone-500'}`}>Cover</button>
-               <button onClick={() => setFormData(p => ({...p, imageFit: 'contain'}))} className={`px-3 py-1 text-[10px] font-bold rounded uppercase ${formData.imageFit==='contain' ? 'bg-stone-700 text-white shadow-sm' : 'text-stone-500'}`}>Fit</button>
-             </div>
+          {isEditing && (
+            <div className="flex flex-col gap-2 mb-6">
+                {formData.imageUrl && !activePortraitFile && (
+                  <div className="flex justify-center gap-2 bg-black/20 p-1 rounded-lg w-fit mx-auto">
+                    <button onClick={() => setFormData(p => ({...p, imageFit: 'cover'}))} className={`px-3 py-1 text-[10px] font-bold rounded uppercase ${formData.imageFit==='cover' ? 'bg-stone-700 text-white shadow-sm' : 'text-stone-500'}`}>Cover</button>
+                    <button onClick={() => setFormData(p => ({...p, imageFit: 'contain'}))} className={`px-3 py-1 text-[10px] font-bold rounded uppercase ${formData.imageFit==='contain' ? 'bg-stone-700 text-white shadow-sm' : 'text-stone-500'}`}>Fit</button>
+                  </div>
+                )}
+                {/* NPC Toggle in Sidebar (for convenience) */}
+                <div className="flex justify-center mt-2">
+                   <div className="flex gap-2 p-1 bg-black/20 rounded-lg w-fit border border-stone-800">
+                      <button onClick={() => setFormData(p => ({...p, isNpc: false}))} className={`px-6 py-2 rounded-md text-xs font-black transition-all uppercase tracking-wider ${!formData.isNpc ? 'bg-emerald-700 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}>PC (Player)</button>
+                      <button onClick={() => setFormData(p => ({...p, isNpc: true}))} className={`px-6 py-2 rounded-md text-xs font-black transition-all uppercase tracking-wider ${formData.isNpc ? 'bg-amber-700 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}>NPC</button>
+                   </div>
+                </div>
+            </div>
           )}
 
           <div className="text-center">
@@ -773,9 +786,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         </div>
 
         {/* Right Column - Tabs & Content */}
-        <div className="flex-1 flex flex-col relative md:h-full">
+        <div className="flex-1 flex flex-col relative md:h-full md:overflow-hidden">
           {/* Header/Tabs Navigation */}
-          <div className={`sticky top-0 z-20 flex flex-col md:flex-row justify-between p-3 md:px-8 md:py-4 border-b ${tc.bgPanel} ${tc.border} backdrop-blur-xl`}>
+          <div className={`sticky top-0 z-20 flex flex-col md:flex-row justify-between p-3 md:px-8 md:py-4 border-b ${tc.bgPanel} ${tc.border} backdrop-blur-xl shrink-0`}>
              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
                {['INFO', 'BIO', 'FILES', 'COMMENTS'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab as any)} className={`whitespace-nowrap px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab ? 'bg-white/10 text-white shadow-inner' : 'text-stone-500 hover:text-stone-300'}`}>{tab}</button>
@@ -790,13 +803,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                  </div>
                )}
                <div className="hidden md:flex items-center gap-3">
-                 {isEditing ? <button onClick={handleSave} className="px-6 py-2 bg-amber-700 text-white rounded-xl font-black text-xs tracking-widest hover:bg-amber-600 transition-colors">SAVE CHANGES</button> : <button onClick={() => setIsEditing(true)} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Edit size={22} /></button>}
+                 {isEditing ? <button onClick={handleSave} className="px-6 py-2 bg-amber-700 text-white rounded-xl font-black text-xs tracking-widest hover:bg-amber-600 transition-colors">변경사항 저장</button> : <button onClick={() => setIsEditing(true)} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Edit size={22} /></button>}
                  <button onClick={onClose} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Close size={24} /></button>
                </div>
              </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
+          <div className="flex-1 md:overflow-y-auto p-6 md:p-12 custom-scrollbar">
             {activeTab === 'INFO' && (
               <div className="space-y-10 max-w-3xl">
                  <div className="grid md:grid-cols-2 gap-8">
@@ -806,6 +819,15 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                           <>
                            {editLayer === 'PUBLIC' ? (
                              <>
+                               {/* NPC Toggle Added Here for Visibility */}
+                               <div className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-stone-800 mb-2">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Character Type</span>
+                                  <div className="flex bg-black/40 rounded-lg p-1 border border-stone-800">
+                                      <button onClick={() => setFormData(p => ({...p, isNpc: false}))} className={`px-4 py-1.5 rounded text-[10px] font-black uppercase transition-colors ${!formData.isNpc ? 'bg-emerald-600 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}>PC</button>
+                                      <button onClick={() => setFormData(p => ({...p, isNpc: true}))} className={`px-4 py-1.5 rounded text-[10px] font-black uppercase transition-colors ${formData.isNpc ? 'bg-amber-600 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}>NPC</button>
+                                  </div>
+                               </div>
+
                                <div className="flex items-center gap-3 p-3 bg-black/20 rounded-xl border border-stone-800">
                                   <label className="flex items-center gap-2 cursor-pointer group">
                                      <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${showAliasInput ? 'bg-amber-600' : 'bg-stone-700'}`}>
@@ -1005,7 +1027,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     )}
 
                     {file.imageUrl && <div className="mb-8 rounded-2xl overflow-hidden shadow-2xl border border-white/5 relative group bg-black/40">
-                       <img src={file.imageUrl} className={`w-full max-h-[500px] ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}/>
+                       <img src={file.imageUrl} className={`w-full ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}/>
                        
                        {isEditing && (
                          <>
@@ -1045,6 +1067,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
             {activeTab === 'COMMENTS' && (
               <div className="h-full flex flex-col space-y-8 max-w-3xl mx-auto animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
+                 {/* ... (Comments content unchanged) ... */}
                  <div className="flex-1 space-y-6">
                     {currentComments.map(c => {
                        const styleConfig = COMMENT_STYLES[c.styleVariant as keyof typeof COMMENT_STYLES] || COMMENT_STYLES['NOTE'];
@@ -1053,54 +1076,26 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                        return (
                        <div key={c.id} className={`p-5 rounded-xl border shadow-xl transition-all hover:scale-[1.01] group relative ${styleConfig.class}`}>
                           {editingCommentId === c.id && tempEditComment ? (
-                            // --- Inline Edit Mode ---
                             <div className="flex flex-col gap-3">
                                <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
-                                  <span className="text-[10px] font-black uppercase tracking-widest opacity-50">EDIT MODE</span>
+                                  <span className="text-[10px] font-black uppercase tracking-widest opacity-50">수정 모드 (EDITING)</span>
                                </div>
-                               
-                               <textarea 
-                                 className="w-full bg-black/20 p-3 rounded-lg border border-white/10 text-sm focus:outline-none focus:border-amber-500/50 resize-none h-32"
-                                 value={tempEditComment.content}
-                                 onChange={(e) => setTempEditComment({...tempEditComment, content: e.target.value})}
-                               />
-                               
+                               <textarea className="w-full bg-black/20 p-3 rounded-lg border border-white/10 text-sm focus:outline-none focus:border-amber-500/50 resize-none h-32" value={tempEditComment.content} onChange={(e) => setTempEditComment({...tempEditComment, content: e.target.value})} />
                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                 <select 
-                                   className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none"
-                                   value={tempEditComment.styleVariant}
-                                   onChange={e => setTempEditComment({...tempEditComment, styleVariant: e.target.value as any})}
-                                 >
-                                   {Object.entries(COMMENT_STYLES).map(([key, conf]) => (
-                                     <option key={key} value={key} className="bg-stone-900">{conf.label}</option>
-                                   ))}
+                                 <select className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none" value={tempEditComment.styleVariant} onChange={e => setTempEditComment({...tempEditComment, styleVariant: e.target.value as any})}>
+                                   {Object.entries(COMMENT_STYLES).map(([key, conf]) => (<option key={key} value={key} className="bg-stone-900">{conf.label}</option>))}
                                  </select>
-
-                                 <select 
-                                   className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none"
-                                   value={tempEditComment.font || 'SANS'}
-                                   onChange={e => setTempEditComment({...tempEditComment, font: e.target.value})}
-                                 >
-                                    {Object.entries(COMMENT_FONTS).map(([key, conf]) => (
-                                       <option key={key} value={key} className="bg-stone-900">{conf.label}</option>
-                                    ))}
+                                 <select className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none" value={tempEditComment.font || 'SANS'} onChange={e => setTempEditComment({...tempEditComment, font: e.target.value})}>
+                                    {Object.entries(COMMENT_FONTS).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}
                                  </select>
-
-                                 <input 
-                                   type="date"
-                                   className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none"
-                                   value={tempEditDate}
-                                   onChange={e => setTempEditDate(e.target.value)}
-                                 />
+                                 <input type="date" className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none" value={tempEditDate} onChange={e => setTempEditDate(e.target.value)} />
                                </div>
-
                                <div className="flex justify-end gap-2 mt-2">
                                   <button onClick={cancelEditingComment} className="px-3 py-1.5 text-xs bg-black/40 hover:bg-black/60 rounded border border-white/10">취소</button>
-                                  <button onClick={saveEditingComment} className="px-3 py-1.5 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded font-bold shadow-lg">저장 완료</button>
+                                  <button onClick={saveEditingComment} className="px-3 py-1.5 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded font-bold shadow-lg">저장</button>
                                </div>
                             </div>
                           ) : (
-                            // --- View Mode ---
                             <>
                               <div className="flex justify-between text-[10px] mb-2 font-mono tracking-widest uppercase border-b border-current/20 pb-2">
                                  <div className="flex items-center gap-2">
@@ -1110,64 +1105,40 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                  </div>
                                  <div className="flex items-center gap-2">
                                     <span className="opacity-60">{new Date(c.createdAt).toLocaleDateString()}</span>
-                                    {/* Direct Edit Button */}
                                     {(isEditing || isSecretRevealed) && (
-                                       <button 
-                                          onClick={() => startEditingComment(c)} 
-                                          className="opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-all ml-2"
-                                          title="Quick Edit"
-                                       >
-                                          <Icons.Edit size={12} />
-                                       </button>
+                                       <div className="flex items-center gap-1 ml-2">
+                                          <button onClick={() => startEditingComment(c)} className="opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-all p-1" title="수정"><Icons.Edit size={12} /></button>
+                                          <button onClick={() => confirmDeleteComment(c.id)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all p-1" title="삭제"><Icons.Close size={12}/></button>
+                                       </div>
                                     )}
                                  </div>
                               </div>
-                              
                               <p className={`text-sm leading-relaxed whitespace-pre-wrap ${fontClass} opacity-90`}>{c.content}</p>
-
-                              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-                                 {(isEditing || isSecretRevealed) && (
-                                   <button onClick={() => confirmDeleteComment(c.id)} className="p-1.5 bg-black/20 hover:bg-red-900/80 text-red-400 hover:text-white rounded backdrop-blur-sm"><Icons.Close size={12}/></button>
-                                 )}
-                              </div>
                             </>
                           )}
                        </div>
                     )})}
-                    {currentComments.length === 0 && <div className="text-center py-20 text-stone-700 italic font-serif">Historical records remain empty.</div>}
+                    {currentComments.length === 0 && <div className="text-center py-20 text-stone-700 italic font-serif">기록된 정보가 없습니다.</div>}
                  </div>
                  
-                 {/* Creation Form */}
                  <div className="flex flex-col gap-4 p-6 bg-black/40 rounded-3xl border border-white/5 shadow-2xl">
                     <div className="flex flex-col md:flex-row md:items-center gap-3 border-b border-white/5 pb-4">
                       <div className="flex items-center gap-2 flex-1">
                          <Icons.Edit size={16} className="text-amber-500" />
-                         <input value={commentName} onChange={e => setCommentName(e.target.value)} className="bg-transparent text-sm font-black uppercase tracking-widest p-1 focus:outline-none text-white w-full md:w-auto" placeholder="ARCHIVIST NAME"/>
+                         <input value={commentName} onChange={e => setCommentName(e.target.value)} className="bg-transparent text-sm font-black uppercase tracking-widest p-1 focus:outline-none text-white w-full md:w-auto" placeholder="작성자 이름"/>
                       </div>
-                      
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                          <select value={commentStyle} onChange={e => setCommentStyle(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none">
-                            {Object.entries(COMMENT_STYLES).map(([key, conf]) => (
-                               <option key={key} value={key}>{conf.label}</option>
-                            ))}
+                            {Object.entries(COMMENT_STYLES).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}
                          </select>
                          <select value={commentFont} onChange={e => setCommentFont(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none">
-                            {Object.entries(COMMENT_FONTS).map(([key, conf]) => (
-                               <option key={key} value={key}>{conf.label}</option>
-                            ))}
+                            {Object.entries(COMMENT_FONTS).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}
                          </select>
                          <input type="date" value={commentDate} onChange={e => setCommentDate(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none" />
                       </div>
                     </div>
-                    
-                    <textarea 
-                       value={commentText} 
-                       onChange={e => setCommentText(e.target.value)} 
-                       className={`bg-transparent text-sm leading-relaxed h-28 focus:outline-none transition-colors resize-none placeholder:opacity-20 ${COMMENT_FONTS[commentFont as keyof typeof COMMENT_FONTS]?.class || 'font-sans'}`} 
-                       placeholder="Append record to historical archive..."
-                    />
-                    
-                    <button onClick={submitComment} className="py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-lg transition-all bg-amber-700 text-white hover:bg-amber-600 active:scale-[0.98]">Commit Record</button>
+                    <textarea value={commentText} onChange={e => setCommentText(e.target.value)} className={`bg-transparent text-sm leading-relaxed h-28 focus:outline-none transition-colors resize-none placeholder:opacity-20 ${COMMENT_FONTS[commentFont as keyof typeof COMMENT_FONTS]?.class || 'font-sans'}`} placeholder="새로운 기록을 입력하세요..." />
+                    <button onClick={submitComment} className="py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-lg transition-all bg-amber-700 text-white hover:bg-amber-600 active:scale-[0.98]">기록 추가</button>
                  </div>
               </div>
             )}
