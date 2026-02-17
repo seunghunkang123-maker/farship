@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, deleteComment as dbDeleteComment, subscribeToChanges } from './services/storage';
 import { AppState, Campaign, Character, CharacterComment } from './types';
 import Layout from './components/Layout';
@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [data, setData] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // 네비게이션 상태
   const [currentView, setCurrentView] = useState<'HOME' | 'CAMPAIGN'>('HOME');
@@ -41,43 +42,69 @@ const App: React.FC = () => {
     title: string;
   }>({ isOpen: false, action: () => {}, title: '' });
 
+  // Debounce Timer Ref
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // --- 초기 로딩 및 Realtime 구독 ---
   const init = async (showLoading = true) => {
     if (showLoading) setLoading(true);
-    setDbError(null);
+    else setIsSyncing(true);
+
+    if (showLoading) setDbError(null);
 
     // 1. DB 연결/테이블 존재 여부 체크 (최초 1회만 strict하게 체크)
-    if (!data) {
+    if (!data && showLoading) {
       const connectionError = await checkDatabaseConnection();
       if (connectionError) {
         console.error("DB Connection Error:", connectionError);
         if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || connectionError.message.includes('not find the table')) {
           setDbError(connectionError.message);
           setLoading(false);
+          setIsSyncing(false);
           return;
         }
       }
     }
 
-    // 2. 데이터 로드
-    const fetched = await loadFullState();
-    setData(fetched);
-    if (showLoading) setLoading(false);
+    // 2. 데이터 로드 (Safe Fetch)
+    try {
+      const fetched = await loadFullState();
+      setData(fetched);
+    } catch (e) {
+      console.error("Load failed:", e);
+      if (showLoading) {
+         setDbError("데이터를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.");
+      } else {
+         console.warn("Background refresh failed. Keeping existing data to prevent data loss.");
+      }
+    } finally {
+      if (showLoading) setLoading(false);
+      else setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
     // 초기 로드
     init(true);
 
-    // Realtime 구독 설정
+    // Realtime 구독 설정 (with Debounce)
     const unsubscribe = subscribeToChanges(() => {
-      // DB 변경 감지 시 백그라운드 갱신 (로딩 화면 없이)
-      console.log("Remote changes detected. Refreshing data...");
-      init(false);
+      // Clear existing timer
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      
+      // Set new timer (Debounce for 1 second)
+      // This prevents rapid-fire updates from deleting/inserting file rows
+      debounceTimerRef.current = setTimeout(() => {
+        console.log("Remote changes detected (debounced). Refreshing...");
+        init(false);
+      }, 1000);
     });
 
     return () => {
       unsubscribe();
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, []);
 
@@ -338,6 +365,15 @@ const App: React.FC = () => {
 
   return (
     <Layout themeClasses={activeCampaign ? activeTheme.classes : undefined}>
+      {isSyncing && (
+        <div className="fixed top-4 right-4 z-50">
+           <div className="bg-black/80 backdrop-blur text-amber-500 text-xs px-3 py-1.5 rounded-full flex items-center gap-2 border border-amber-500/30 animate-pulse">
+              <Icons.Refresh size={12} className="animate-spin" />
+              Syncing...
+           </div>
+        </div>
+      )}
+
       {currentView === 'HOME' && (
         <MainDashboard 
           campaigns={data.campaigns}

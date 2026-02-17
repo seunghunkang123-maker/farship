@@ -174,6 +174,28 @@ begin
   end if;
 end $$;
 
+-- RLS 정책 재설정 (권한 문제 방지)
+alter table settings enable row level security;
+alter table campaigns enable row level security;
+alter table characters enable row level security;
+alter table extra_files enable row level security;
+alter table character_comments enable row level security;
+
+drop policy if exists "Public Access Settings" on settings;
+create policy "Public Access Settings" on settings for all using (true) with check (true);
+
+drop policy if exists "Public Access Campaigns" on campaigns;
+create policy "Public Access Campaigns" on campaigns for all using (true) with check (true);
+
+drop policy if exists "Public Access Characters" on characters;
+create policy "Public Access Characters" on characters for all using (true) with check (true);
+
+drop policy if exists "Public Access ExtraFiles" on extra_files;
+create policy "Public Access ExtraFiles" on extra_files for all using (true) with check (true);
+
+drop policy if exists "Public Access Comments" on character_comments;
+create policy "Public Access Comments" on character_comments for all using (true) with check (true);
+
 -- 스키마 캐시 리로드
 NOTIFY pgrst, 'reload config';
 `;

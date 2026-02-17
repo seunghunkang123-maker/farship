@@ -81,7 +81,7 @@ export const subscribeToChanges = (onUpdate: () => void) => {
       'postgres_changes',
       { event: '*', schema: 'public' },
       (payload) => {
-        console.log('Realtime change received:', payload);
+        // console.log('Realtime change received:', payload);
         onUpdate();
       }
     )
@@ -102,109 +102,112 @@ export const checkDatabaseConnection = async () => {
 };
 
 export const loadFullState = async (): Promise<AppState> => {
-  try {
-    const { data: settingsData, error: settingsError } = await supabase.from('settings').select('*').maybeSingle(); 
-    const { data: campaignsData, error: campError } = await supabase.from('campaigns').select('*');
-    const { data: charData, error: charError } = await supabase.from('characters').select('*');
-    const { data: fileData, error: fileError } = await supabase.from('extra_files').select('*');
-    const { data: commentData, error: commentError } = await supabase.from('character_comments').select('*');
+  // CRITICAL: Do NOT return INITIAL_STATE on catch. Throw error to let the caller handle it.
+  // This prevents the UI from flashing "No Data" when a request fails temporarily.
 
-    if (settingsError && settingsError.code !== 'PGRST116') console.error('Settings Error:', settingsError);
-    if (campError) console.error('Campaign Error:', campError);
-    if (charError) console.error('Character Error:', charError);
-    if (fileError) console.error('File Error:', fileError);
-    if (commentError && commentError.code !== '42P01') console.error('Comment Error:', commentError);
+  const { data: settingsData, error: settingsError } = await supabase.from('settings').select('*').maybeSingle(); 
+  
+  const { data: campaignsData, error: campError } = await supabase.from('campaigns').select('*');
+  if (campError) throw new Error(`Campaign Load Failed: ${campError.message}`);
 
-    const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
-      id: c.id,
-      name: c.name,
-      subTitle: c.sub_title || '',
-      system: c.system as SystemType,
-      logoUrl: c.logo_url || undefined,
-      backgroundImages: c.background_images || [],
-      description: c.description || undefined,
-      theme: c.theme || undefined,
-      aliasLabel: c.alias_label || undefined
-    }));
+  const { data: charData, error: charError } = await supabase.from('characters').select('*');
+  if (charError) throw new Error(`Character Load Failed: ${charError.message}`);
 
-    const files = (fileData || []) as DbExtraFile[];
-    const comments = (commentData || []) as DbComment[];
+  const { data: fileData, error: fileError } = await supabase.from('extra_files').select('*');
+  if (fileError) throw new Error(`File Load Failed: ${fileError.message}`);
 
-    const characters: Character[] = (charData || []).map((c: DbCharacter) => {
-      const myFiles: ExtraFile[] = files
-        .filter(f => f.character_id === c.id)
-        .map(f => ({
-          id: f.id,
-          title: f.title,
-          content: f.content || '',
-          imageUrl: f.image_url || undefined,
-          useAsPortrait: f.use_as_portrait,
-          isSecret: f.is_secret,
-          fileType: f.file_type || 'REGULAR',
-          combatStats: f.combat_stats || [],
-          imageFit: f.image_fit || 'cover'
-        }));
+  const { data: commentData, error: commentError } = await supabase.from('character_comments').select('*');
+  if (commentError && commentError.code !== '42P01') throw new Error(`Comment Load Failed: ${commentError.message}`);
 
-      const myComments: CharacterComment[] = comments
-        .filter(cmt => cmt.character_id === c.id)
-        .map(cmt => ({
-          id: cmt.id,
-          characterId: cmt.character_id,
-          userName: cmt.user_name,
-          content: cmt.content,
-          styleVariant: (cmt.style_variant as any) || 'NOTE',
-          font: cmt.font || undefined,
-          createdAt: new Date(cmt.created_at).getTime()
-        }));
+  if (settingsError && settingsError.code !== 'PGRST116') console.warn('Settings Warning:', settingsError);
 
-      return {
-        id: c.id,
-        campaignId: c.campaign_id,
-        name: c.name,
-        alias: c.alias || undefined,
-        isNameBlurred: c.is_name_blurred || false,
-        realName: c.real_name || undefined,
-        playerName: c.player_name || undefined,
-        isNpc: c.is_npc,
-        imageUrl: c.image_url || undefined,
-        imageFit: c.image_fit,
-        summary: c.summary || '',
-        description: c.description || undefined,
-        levelOrExp: c.level_or_exp || undefined,
-        affiliations: c.affiliations || [],
-        age: c.age || undefined,
-        gender: c.gender || undefined,
-        height: c.height || undefined,
-        weight: c.weight || undefined,
-        appearance: c.appearance || undefined,
-        dndClass: c.dnd_class || undefined,
-        dndSubclass: c.dnd_subclass || undefined,
-        cpredRole: c.cpred_role || undefined,
-        cpredOrigin: c.cpred_origin || undefined,
-        customClass: c.custom_class || undefined,
-        customSubclass: c.custom_subclass || undefined,
-        secretProfile: c.secret_profile || undefined, 
-        extraFiles: myFiles,
-        comments: myComments,
-        updatedAt: c.updated_at
-      };
-    });
+  const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
+    id: c.id,
+    name: c.name,
+    subTitle: c.sub_title || '',
+    system: c.system as SystemType,
+    logoUrl: c.logo_url || undefined,
+    backgroundImages: c.background_images || [],
+    description: c.description || undefined,
+    theme: c.theme || undefined,
+    aliasLabel: c.alias_label || undefined
+  }));
 
-    if (campaigns.length === 0 && (!settingsData || !settingsData.password)) {
-       return INITIAL_STATE;
-    }
+  const files = (fileData || []) as DbExtraFile[];
+  const comments = (commentData || []) as DbComment[];
+
+  const characters: Character[] = (charData || []).map((c: DbCharacter) => {
+    const myFiles: ExtraFile[] = files
+      .filter(f => f.character_id === c.id)
+      .map(f => ({
+        id: f.id,
+        title: f.title,
+        content: f.content || '',
+        imageUrl: f.image_url || undefined,
+        useAsPortrait: f.use_as_portrait,
+        isSecret: f.is_secret,
+        fileType: f.file_type || 'REGULAR',
+        combatStats: f.combat_stats || [],
+        imageFit: f.image_fit || 'cover'
+      }));
+
+    const myComments: CharacterComment[] = comments
+      .filter(cmt => cmt.character_id === c.id)
+      .map(cmt => ({
+        id: cmt.id,
+        characterId: cmt.character_id,
+        userName: cmt.user_name,
+        content: cmt.content,
+        styleVariant: (cmt.style_variant as any) || 'NOTE',
+        font: cmt.font || undefined,
+        createdAt: new Date(cmt.created_at).getTime()
+      }));
 
     return {
-      campaigns,
-      characters,
-      globalBackgrounds: settingsData?.global_backgrounds || INITIAL_STATE.globalBackgrounds,
-      password: settingsData?.password || INITIAL_STATE.password
+      id: c.id,
+      campaignId: c.campaign_id,
+      name: c.name,
+      alias: c.alias || undefined,
+      isNameBlurred: c.is_name_blurred || false,
+      realName: c.real_name || undefined,
+      playerName: c.player_name || undefined,
+      isNpc: c.is_npc,
+      imageUrl: c.image_url || undefined,
+      imageFit: c.image_fit,
+      summary: c.summary || '',
+      description: c.description || undefined,
+      levelOrExp: c.level_or_exp || undefined,
+      affiliations: c.affiliations || [],
+      age: c.age || undefined,
+      gender: c.gender || undefined,
+      height: c.height || undefined,
+      weight: c.weight || undefined,
+      appearance: c.appearance || undefined,
+      dndClass: c.dnd_class || undefined,
+      dndSubclass: c.dnd_subclass || undefined,
+      cpredRole: c.cpred_role || undefined,
+      cpredOrigin: c.cpred_origin || undefined,
+      customClass: c.custom_class || undefined,
+      customSubclass: c.custom_subclass || undefined,
+      secretProfile: c.secret_profile || undefined, 
+      extraFiles: myFiles,
+      comments: myComments,
+      updatedAt: c.updated_at
     };
+  });
 
-  } catch (err) {
-    console.error("Critical error loading state:", err);
-    return INITIAL_STATE;
+  // Only return INITIAL_STATE if specifically configured (no campaigns in DB AND no settings)
+  // This distinguishes "Empty DB" from "Failed Fetch"
+  if (campaigns.length === 0 && (!settingsData || !settingsData.password)) {
+      return INITIAL_STATE;
   }
+
+  return {
+    campaigns,
+    characters,
+    globalBackgrounds: settingsData?.global_backgrounds || INITIAL_STATE.globalBackgrounds,
+    password: settingsData?.password || INITIAL_STATE.password
+  };
 };
 
 export const saveSettings = async (password: string, globalBackgrounds: string[]) => {
@@ -274,9 +277,6 @@ export const saveCharacter = async (char: Character) => {
   if (charError) throw charError;
 
   // Safer File Sync: Delete only what needs to be deleted, Insert only new/updated
-  // Actually, standard delete-insert for 1:N items is safe IF wrapped in Realtime sync context, 
-  // but to be extra safe against 'disappearing', we just ensure we insert correctly.
-  
   await supabase.from('extra_files').delete().eq('character_id', char.id);
 
   if (char.extraFiles.length > 0) {
