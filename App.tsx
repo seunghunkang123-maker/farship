@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, deleteComment as dbDeleteComment } from './services/storage';
+import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, deleteComment as dbDeleteComment, subscribeToChanges } from './services/storage';
 import { AppState, Campaign, Character, CharacterComment } from './types';
 import Layout from './components/Layout';
 import MainDashboard from './components/views/MainDashboard';
@@ -41,38 +41,52 @@ const App: React.FC = () => {
     title: string;
   }>({ isOpen: false, action: () => {}, title: '' });
 
-  // --- 초기 로딩 ---
-  const init = async () => {
-    setLoading(true);
+  // --- 초기 로딩 및 Realtime 구독 ---
+  const init = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setDbError(null);
 
-    // 1. DB 연결/테이블 존재 여부 체크
-    const connectionError = await checkDatabaseConnection();
-    if (connectionError) {
-      console.error("DB Connection Error:", connectionError);
-      if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || connectionError.message.includes('not find the table')) {
-        setDbError(connectionError.message);
-        setLoading(false);
-        return;
+    // 1. DB 연결/테이블 존재 여부 체크 (최초 1회만 strict하게 체크)
+    if (!data) {
+      const connectionError = await checkDatabaseConnection();
+      if (connectionError) {
+        console.error("DB Connection Error:", connectionError);
+        if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || connectionError.message.includes('not find the table')) {
+          setDbError(connectionError.message);
+          setLoading(false);
+          return;
+        }
       }
     }
 
     // 2. 데이터 로드
     const fetched = await loadFullState();
     setData(fetched);
-    setLoading(false);
+    if (showLoading) setLoading(false);
   };
 
   useEffect(() => {
-    init();
+    // 초기 로드
+    init(true);
+
+    // Realtime 구독 설정
+    const unsubscribe = subscribeToChanges(() => {
+      // DB 변경 감지 시 백그라운드 갱신 (로딩 화면 없이)
+      console.log("Remote changes detected. Refreshing data...");
+      init(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // 에러 화면
   if (dbError) {
-    return <DatabaseSetup onRetry={init} errorMsg={dbError} />;
+    return <DatabaseSetup onRetry={() => init(true)} errorMsg={dbError} />;
   }
 
-  // 로딩 중 표시
+  // 로딩 중 표시 (최초 로드 시에만)
   if (loading || !data) {
     return (
       <div className="min-h-screen bg-[#1c1917] flex flex-col items-center justify-center text-stone-200 gap-6 relative overflow-hidden">
@@ -121,9 +135,9 @@ const App: React.FC = () => {
   const goToCampaign = (id: string) => {
     setActiveCampaignId(id);
     setCurrentView('CAMPAIGN');
-    // 캠페인 진입 시 진상 상태 초기화 (원하면 주석 처리)
+    // 캠페인 진입 시 진상 상태 초기화
     setRevealedCharacterIds(new Set());
-    setNameRevealedIds(new Set()); // 이름 블러 해제 초기화
+    setNameRevealedIds(new Set()); 
     setIsGlobalReveal(false);
   };
 
@@ -146,8 +160,7 @@ const App: React.FC = () => {
   };
 
   const toggleGlobalReveal = () => {
-    // When toggling Global Reveal, we reset individual reveals to ensure consistent state
-    // This solves the issue where manually revealed chars stay revealed even after toggling Global OFF
+    // Global Toggle 시 개별 상태 초기화하여 일관성 유지
     setRevealedCharacterIds(new Set());
     setIsGlobalReveal(prev => !prev);
   };
@@ -167,6 +180,8 @@ const App: React.FC = () => {
   const saveCharacter = async (char: Character) => {
     try {
       await dbSaveCharacter(char);
+      // setData 업데이트는 Realtime 구독이 자동으로 처리할 수도 있지만,
+      // 사용자 경험(즉각적 반응)을 위해 로컬 상태도 같이 업데이트합니다.
       setData(prev => {
         if (!prev) return null;
         const existingIdx = prev.characters.findIndex(c => c.id === char.id);
@@ -179,8 +194,6 @@ const App: React.FC = () => {
         }
         return { ...prev, characters: newChars };
       });
-      // 저장 후 창을 닫지 않거나, 닫는 로직은 CharacterDetail 내부에서 처리
-      // setActiveCharacterId(null); // (CharacterDetail에서 처리)
     } catch (e) {
       handleError(e, "캐릭터 저장 중 오류가 발생했습니다.");
     }
@@ -210,6 +223,7 @@ const App: React.FC = () => {
   const handleAddComment = async (comment: CharacterComment) => {
      try {
        await dbAddComment(comment);
+       // Optimistic update
        setData(prev => {
          if(!prev) return null;
          const charIndex = prev.characters.findIndex(c => c.id === comment.characterId);
@@ -349,11 +363,9 @@ const App: React.FC = () => {
             setSettingsStartTab('CAMPAIGN');
             setIsSettingsOpen(true);
           }}
-          // Pass Truth Reveal State
           revealedCharacterIds={revealedCharacterIds}
           isGlobalReveal={isGlobalReveal}
           onToggleGlobalReveal={toggleGlobalReveal}
-          // Pass Name Blur State
           nameRevealedIds={nameRevealedIds}
         />
       )}
@@ -371,11 +383,9 @@ const App: React.FC = () => {
           }}
           onAddComment={handleAddComment}
           onDeleteComment={handleDeleteComment}
-          // Pass Truth Reveal State
           isGlobalReveal={isGlobalReveal}
           isRevealed={activeCharacterId ? revealedCharacterIds.has(activeCharacterId) : false}
           onToggleReveal={(id, state) => toggleCharacterReveal(id, state)}
-          // Pass Name Blur State
           isNameRevealed={activeCharacterId ? nameRevealedIds.has(activeCharacterId) : false}
           onToggleNameReveal={(id, state) => toggleNameReveal(id, state)}
         />

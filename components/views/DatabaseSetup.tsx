@@ -27,7 +27,7 @@ create table if not exists campaigns (
   background_images text[] default '{}',
   description text,
   theme text default 'ADVENTURE',
-  alias_label text, -- New: 이명 항목 이름 (예: 핸들, 코드네임)
+  alias_label text, 
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -36,8 +36,8 @@ create table if not exists characters (
   id uuid primary key default uuid_generate_v4(),
   campaign_id uuid references campaigns(id) on delete cascade,
   name text not null,
-  alias text, -- New: 이명/칭호
-  is_name_blurred boolean default false, -- New: 이명 존재 시 본명 가림 여부
+  alias text, 
+  is_name_blurred boolean default false, 
   
   real_name text,
   player_name text,
@@ -47,7 +47,7 @@ create table if not exists characters (
   summary text,
   description text,
   level_or_exp text,
-  affiliations jsonb, -- New: 소속 및 계급 (JSON Array)
+  affiliations jsonb, 
   
   -- Bio Fields --
   age text,
@@ -76,7 +76,10 @@ create table if not exists extra_files (
   content text,
   image_url text,
   use_as_portrait boolean default false,
-  is_secret boolean default false
+  is_secret boolean default false,
+  file_type text default 'REGULAR',
+  combat_stats jsonb,
+  image_fit text default 'cover'
 );
 
 -- 5. 캐릭터 코멘트(댓글) 테이블
@@ -97,7 +100,7 @@ alter table characters enable row level security;
 alter table extra_files enable row level security;
 alter table character_comments enable row level security;
 
--- 정책 생성 (기존 충돌 방지 위해 drop 후 생성)
+-- 정책 생성
 drop policy if exists "Public Access Settings" on settings;
 create policy "Public Access Settings" on settings for all using (true) with check (true);
 
@@ -118,7 +121,7 @@ NOTIFY pgrst, 'reload config';
 `;
 
 const UPDATE_SQL = `
--- 기존 업데이트 (1.2)
+-- 기존 업데이트
 do $$
 begin
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='secret_profile') then
@@ -138,15 +141,13 @@ begin
   end if;
 end $$;
 
--- 신규 업데이트 (1.3: Alias/Blur)
+-- 신규 업데이트 (Alias/Blur/Affiliations/ExtraFiles Expanded)
 do $$
 begin
-  -- Campaigns: Alias Label
   if not exists (select 1 from information_schema.columns where table_name='campaigns' and column_name='alias_label') then
     alter table campaigns add column alias_label text;
   end if;
 
-  -- Characters: Alias, Blur
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='alias') then
     alter table characters add column alias text;
   end if;
@@ -155,14 +156,25 @@ begin
     alter table characters add column is_name_blurred boolean default false;
   end if;
   
-  -- Characters: Affiliations (New)
   if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='affiliations') then
     alter table characters add column affiliations jsonb;
   end if;
+
+  -- Extra Files expansion
+  if not exists (select 1 from information_schema.columns where table_name='extra_files' and column_name='file_type') then
+    alter table extra_files add column file_type text default 'REGULAR';
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_name='extra_files' and column_name='combat_stats') then
+    alter table extra_files add column combat_stats jsonb;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_name='extra_files' and column_name='image_fit') then
+    alter table extra_files add column image_fit text default 'cover';
+  end if;
 end $$;
 
-
--- 스키마 캐시 리로드 (필수)
+-- 스키마 캐시 리로드
 NOTIFY pgrst, 'reload config';
 `;
 
@@ -212,7 +224,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
               </button>
             </h3>
             <p className="text-xs text-slate-400 mb-2 font-bold text-amber-200">
-              '소속/이명/진상 모드 확장' 기능을 위해 DB 업데이트가 필요합니다.
+              '능력치 소개' 및 '소속/태그' 데이터 저장을 위해 DB 업데이트가 필요합니다.
             </p>
             <pre className="text-xs text-slate-400 overflow-auto max-h-40 custom-scrollbar p-2 bg-black/30 rounded">
               {UPDATE_SQL}

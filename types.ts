@@ -9,13 +9,21 @@ export enum SystemType {
 
 export const CORE_MEMBERS = ['피쉬', '델리', '망령', '배추', '승훈', '유자'];
 
+export interface CombatStat {
+  name: string;
+  value: number; // 1 to 5
+}
+
 export interface ExtraFile {
   id: string;
   title: string;
   content: string;
-  imageUrl?: string; // Image support for secrets/clues
-  useAsPortrait?: boolean; // If true, this image overrides the main character portrait
-  isSecret?: boolean; // Legacy field (still useful for hiding individual items in public mode)
+  imageUrl?: string; 
+  useAsPortrait?: boolean; 
+  isSecret?: boolean; 
+  fileType?: 'REGULAR' | 'COMBAT';
+  combatStats?: CombatStat[];
+  imageFit?: 'cover' | 'contain';
 }
 
 export interface CharacterComment {
@@ -23,24 +31,22 @@ export interface CharacterComment {
   characterId: string;
   userName: string;
   content: string;
-  styleVariant: 'NOTE' | 'STAMP' | 'WARNING' | 'MEMO'; // UI style
-  font?: string; // New: Custom font selection ('HAND', 'SERIF', 'MONO', 'SANS', 'BOLD')
+  styleVariant: 'NOTE' | 'STAMP' | 'WARNING' | 'MEMO';
+  font?: string;
   createdAt: number;
 }
 
-// New: Affiliation Structure
 export interface CharacterAffiliation {
   id: string;
   name: string;
-  rank?: string; // Optional Rank/Position
-  isStrikethrough?: boolean; // 취소선 여부 (탈퇴, 전직 등 표현)
-  isHidden?: boolean; // New: 숨김 여부 (비밀 모드에서 공개 태그를 가리기 위함)
+  rank?: string;
+  isStrikethrough?: boolean;
+  isHidden?: boolean;
 }
 
-// Secret Profile Structure (Expanded)
 export interface SecretProfile {
-  name?: string; // Secret Name / Real Name when revealed
-  alias?: string; // New: Secret Alias
+  name?: string;
+  alias?: string;
   image_url?: string;
   summary?: string;
   description?: string;
@@ -49,63 +55,42 @@ export interface SecretProfile {
   height?: string;
   weight?: string;
   appearance?: string;
-  realName?: string; // Legacy field support
-  
-  // New: Secret Mode specific data
+  realName?: string;
   levelOrExp?: string;
-  affiliations?: CharacterAffiliation[]; // Secret Affiliations 
-  extraFiles?: ExtraFile[]; // Separate list for secret mode
-  comments?: CharacterComment[]; // Separate list for secret mode
+  affiliations?: CharacterAffiliation[];
+  extraFiles?: ExtraFile[];
+  comments?: CharacterComment[];
 }
 
 export interface Character {
   id: string;
   campaignId: string;
   name: string; 
-  
-  // New: Universal Alias System
-  alias?: string; // 이명, 칭호, 핸들 등
-  isNameBlurred?: boolean; // 이명 존재 시 본명 블러 처리 여부
-
-  realName?: string; // Legacy: Can be used as subtitle or secondary name
+  alias?: string;
+  isNameBlurred?: boolean;
+  realName?: string;
   playerName?: string; 
   isNpc: boolean;
   imageUrl?: string; 
   imageFit: 'cover' | 'contain';
   summary: string; 
   description?: string; 
-  
-  // New Physical/Bio Fields
   age?: string;
   gender?: string;
   height?: string;
   weight?: string;
   appearance?: string; 
-
   levelOrExp?: string; 
-  
-  // New: Affiliations (Groups/Organizations)
   affiliations?: CharacterAffiliation[];
-
-  // DnD Specific
   dndClass?: string;
   dndSubclass?: string;
-  
-  // Cyberpunk Specific
   cpredRole?: string;
   cpredOrigin?: string;
-
-  // Other / Custom System Specific
   customClass?: string;    
   customSubclass?: string; 
-  
-  // Common Extra Fields
   extraFiles: ExtraFile[];
   comments: CharacterComment[]; 
-  
-  // Secret Profile Object (Hidden by default)
   secretProfile?: SecretProfile;
-
   updatedAt: number;
 }
 
@@ -118,8 +103,6 @@ export interface Campaign {
   backgroundImages: string[]; 
   description?: string;
   theme?: string; 
-  
-  // New: Custom Label for "Alias" field (e.g., "Handle", "Code Name")
   aliasLabel?: string;
 }
 
@@ -130,7 +113,6 @@ export interface AppState {
   password: string; 
 }
 
-// DnD Class Constants
 export const DND_CLASSES = [
   { label: '바바리안 (Barbarian)', value: 'Barbarian' },
   { label: '바드 (Bard)', value: 'Bard' },
@@ -173,7 +155,6 @@ export const BOB_PLAYBOOKS = [
   '신병 (Rookie)',
 ];
 
-// --- Theme Definition Type ---
 export interface ThemeConfig {
   name: string;
   classes: {

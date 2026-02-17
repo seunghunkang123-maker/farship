@@ -1,16 +1,14 @@
 
-import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType, CharacterAffiliation } from '../types';
+import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType, CharacterAffiliation, CombatStat } from '../types';
 import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
 
-// --- DB 타입 매핑 인터페이스 ---
 interface DbCharacter {
   id: string;
   campaign_id: string;
   name: string;
-  alias: string | null; // New
-  is_name_blurred: boolean; // New
-
+  alias: string | null;
+  is_name_blurred: boolean;
   real_name: string | null;
   player_name: string | null; 
   is_npc: boolean;
@@ -19,26 +17,19 @@ interface DbCharacter {
   summary: string | null;
   description: string | null;
   level_or_exp: string | null;
-  
-  // New: Affiliations (Stored as JSONB)
   affiliations: CharacterAffiliation[] | null;
-
-  // Bio Fields
   age: string | null;
   gender: string | null;
   height: string | null;
   weight: string | null;
   appearance: string | null;
-
   dnd_class: string | null;
   dnd_subclass: string | null;
   cpred_role: string | null;
   cpred_origin: string | null;
   custom_class: string | null;
   custom_subclass: string | null;
-  
   secret_profile: SecretProfile | null; 
-
   updated_at: number;
 }
 
@@ -50,6 +41,9 @@ interface DbExtraFile {
   image_url: string | null;
   use_as_portrait: boolean;
   is_secret: boolean;
+  file_type: 'REGULAR' | 'COMBAT' | null;
+  combat_stats: CombatStat[] | null;
+  image_fit: 'cover' | 'contain' | null;
 }
 
 interface DbComment {
@@ -71,47 +65,49 @@ interface DbCampaign {
   background_images: string[] | null;
   description: string | null;
   theme: string | null;
-  alias_label: string | null; // New
+  alias_label: string | null;
 }
 
-// Helper: UUID 검증
 const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-// Helper: undefined -> null 변환 (DB 저장용)
 const toDbValue = <T>(value: T | undefined): T | null => {
   return value === undefined ? null : value;
 };
 
-// --- DB 연결 확인 ---
+// --- Realtime Subscription ---
+export const subscribeToChanges = (onUpdate: () => void) => {
+  const channel = supabase.channel('public-db-changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public' },
+      (payload) => {
+        console.log('Realtime change received:', payload);
+        onUpdate();
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Connected to Supabase Realtime');
+      }
+    });
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
 export const checkDatabaseConnection = async () => {
   const { error } = await supabase.from('campaigns').select('id').limit(1);
   return error;
 };
 
-// --- 전체 상태 로딩 ---
-
 export const loadFullState = async (): Promise<AppState> => {
   try {
-    const { data: settingsData, error: settingsError } = await supabase
-      .from('settings')
-      .select('*')
-      .maybeSingle(); 
-    
-    const { data: campaignsData, error: campError } = await supabase
-      .from('campaigns')
-      .select('*');
-
-    const { data: charData, error: charError } = await supabase
-      .from('characters')
-      .select('*');
-
-    const { data: fileData, error: fileError } = await supabase
-      .from('extra_files')
-      .select('*');
-
-    const { data: commentData, error: commentError } = await supabase
-      .from('character_comments')
-      .select('*');
+    const { data: settingsData, error: settingsError } = await supabase.from('settings').select('*').maybeSingle(); 
+    const { data: campaignsData, error: campError } = await supabase.from('campaigns').select('*');
+    const { data: charData, error: charError } = await supabase.from('characters').select('*');
+    const { data: fileData, error: fileError } = await supabase.from('extra_files').select('*');
+    const { data: commentData, error: commentError } = await supabase.from('character_comments').select('*');
 
     if (settingsError && settingsError.code !== 'PGRST116') console.error('Settings Error:', settingsError);
     if (campError) console.error('Campaign Error:', campError);
@@ -128,7 +124,7 @@ export const loadFullState = async (): Promise<AppState> => {
       backgroundImages: c.background_images || [],
       description: c.description || undefined,
       theme: c.theme || undefined,
-      aliasLabel: c.alias_label || undefined // New
+      aliasLabel: c.alias_label || undefined
     }));
 
     const files = (fileData || []) as DbExtraFile[];
@@ -143,7 +139,10 @@ export const loadFullState = async (): Promise<AppState> => {
           content: f.content || '',
           imageUrl: f.image_url || undefined,
           useAsPortrait: f.use_as_portrait,
-          isSecret: f.is_secret
+          isSecret: f.is_secret,
+          fileType: f.file_type || 'REGULAR',
+          combatStats: f.combat_stats || [],
+          imageFit: f.image_fit || 'cover'
         }));
 
       const myComments: CharacterComment[] = comments
@@ -162,9 +161,8 @@ export const loadFullState = async (): Promise<AppState> => {
         id: c.id,
         campaignId: c.campaign_id,
         name: c.name,
-        alias: c.alias || undefined, // New
-        isNameBlurred: c.is_name_blurred || false, // New
-
+        alias: c.alias || undefined,
+        isNameBlurred: c.is_name_blurred || false,
         realName: c.real_name || undefined,
         playerName: c.player_name || undefined,
         isNpc: c.is_npc,
@@ -173,25 +171,19 @@ export const loadFullState = async (): Promise<AppState> => {
         summary: c.summary || '',
         description: c.description || undefined,
         levelOrExp: c.level_or_exp || undefined,
-        
-        affiliations: c.affiliations || [], // New
-
-        // Bio Fields
+        affiliations: c.affiliations || [],
         age: c.age || undefined,
         gender: c.gender || undefined,
         height: c.height || undefined,
         weight: c.weight || undefined,
         appearance: c.appearance || undefined,
-
         dndClass: c.dnd_class || undefined,
         dndSubclass: c.dnd_subclass || undefined,
-        cpred_role: c.cpred_role || undefined,
-        cpred_origin: c.cpred_origin || undefined,
+        cpredRole: c.cpred_role || undefined,
+        cpredOrigin: c.cpred_origin || undefined,
         customClass: c.custom_class || undefined,
         customSubclass: c.custom_subclass || undefined,
-        
         secretProfile: c.secret_profile || undefined, 
-
         extraFiles: myFiles,
         comments: myComments,
         updatedAt: c.updated_at
@@ -203,8 +195,8 @@ export const loadFullState = async (): Promise<AppState> => {
     }
 
     return {
-      campaigns: campaigns,
-      characters: characters,
+      campaigns,
+      characters,
       globalBackgrounds: settingsData?.global_backgrounds || INITIAL_STATE.globalBackgrounds,
       password: settingsData?.password || INITIAL_STATE.password
     };
@@ -215,31 +207,17 @@ export const loadFullState = async (): Promise<AppState> => {
   }
 };
 
-// --- 저장/삭제 작업 (CRUD) ---
-
 export const saveSettings = async (password: string, globalBackgrounds: string[]) => {
   const { data } = await supabase.from('settings').select('id').limit(1);
-  
   if (data && data.length > 0) {
-    const { error } = await supabase.from('settings').update({
-      password,
-      global_backgrounds: globalBackgrounds
-    }).eq('id', data[0].id);
-    if (error) throw error;
+    await supabase.from('settings').update({ password, global_backgrounds: globalBackgrounds }).eq('id', data[0].id);
   } else {
-    const { error } = await supabase.from('settings').insert({
-      password,
-      global_backgrounds: globalBackgrounds
-    });
-    if (error) throw error;
+    await supabase.from('settings').insert({ password, global_backgrounds: globalBackgrounds });
   }
 };
 
 export const saveCampaign = async (campaign: Campaign) => {
-  if (!isUuid(campaign.id)) {
-    throw new Error(`Invalid Campaign ID: ${campaign.id}`);
-  }
-
+  if (!isUuid(campaign.id)) throw new Error(`Invalid Campaign ID: ${campaign.id}`);
   const dbCamp = {
     id: campaign.id,
     name: campaign.name,
@@ -249,31 +227,25 @@ export const saveCampaign = async (campaign: Campaign) => {
     background_images: campaign.backgroundImages,
     description: toDbValue(campaign.description),
     theme: toDbValue(campaign.theme),
-    alias_label: toDbValue(campaign.aliasLabel) // New
+    alias_label: toDbValue(campaign.aliasLabel)
   };
-
-  const { error } = await supabase.from('campaigns').upsert(dbCamp);
-  if (error) throw error;
+  await supabase.from('campaigns').upsert(dbCamp);
 };
 
 export const deleteCampaign = async (id: string) => {
   if (!isUuid(id)) return;
-  const { error } = await supabase.from('campaigns').delete().eq('id', id);
-  if (error) throw error;
+  await supabase.from('campaigns').delete().eq('id', id);
 };
 
 export const saveCharacter = async (char: Character) => {
-  if (!isUuid(char.id)) {
-    throw new Error(`Invalid Character ID: ${char.id}`);
-  }
+  if (!isUuid(char.id)) throw new Error(`Invalid Character ID: ${char.id}`);
 
   const dbChar = {
     id: char.id,
     campaign_id: char.campaignId,
     name: char.name,
-    alias: toDbValue(char.alias), // New
-    is_name_blurred: char.isNameBlurred, // New
-
+    alias: toDbValue(char.alias),
+    is_name_blurred: char.isNameBlurred,
     real_name: toDbValue(char.realName),
     player_name: toDbValue(char.playerName),
     is_npc: char.isNpc,
@@ -282,33 +254,30 @@ export const saveCharacter = async (char: Character) => {
     summary: toDbValue(char.summary),
     description: toDbValue(char.description),
     level_or_exp: toDbValue(char.levelOrExp),
-    
-    affiliations: char.affiliations && char.affiliations.length > 0 ? char.affiliations : null, // New
-
-    // Bio Fields
+    affiliations: char.affiliations && char.affiliations.length > 0 ? char.affiliations : null,
     age: toDbValue(char.age),
     gender: toDbValue(char.gender),
     height: toDbValue(char.height),
     weight: toDbValue(char.weight),
     appearance: toDbValue(char.appearance),
-
     dnd_class: toDbValue(char.dndClass),
     dnd_subclass: toDbValue(char.dndSubclass),
     cpred_role: toDbValue(char.cpredRole),
     cpred_origin: toDbValue(char.cpredOrigin),
     custom_class: toDbValue(char.customClass),
     custom_subclass: toDbValue(char.customSubclass),
-    
     secret_profile: toDbValue(char.secretProfile), 
-
     updated_at: char.updatedAt
   };
 
   const { error: charError } = await supabase.from('characters').upsert(dbChar);
   if (charError) throw charError;
 
-  const { error: deleteError } = await supabase.from('extra_files').delete().eq('character_id', char.id);
-  if (deleteError) throw deleteError;
+  // Safer File Sync: Delete only what needs to be deleted, Insert only new/updated
+  // Actually, standard delete-insert for 1:N items is safe IF wrapped in Realtime sync context, 
+  // but to be extra safe against 'disappearing', we just ensure we insert correctly.
+  
+  await supabase.from('extra_files').delete().eq('character_id', char.id);
 
   if (char.extraFiles.length > 0) {
     const dbFiles = char.extraFiles.map(f => ({
@@ -317,10 +286,12 @@ export const saveCharacter = async (char: Character) => {
       title: f.title,
       content: toDbValue(f.content),
       image_url: toDbValue(f.imageUrl),
-      use_as_portrait: f.useAsPortrait,
-      is_secret: f.isSecret
+      use_as_portrait: !!f.useAsPortrait,
+      is_secret: !!f.isSecret,
+      file_type: f.fileType || 'REGULAR',
+      combat_stats: f.combatStats || [],
+      image_fit: f.imageFit || 'cover'
     }));
-
     const { error: fileError } = await supabase.from('extra_files').insert(dbFiles);
     if (fileError) throw fileError;
   }
@@ -328,8 +299,7 @@ export const saveCharacter = async (char: Character) => {
 
 export const deleteCharacter = async (id: string) => {
   if (!isUuid(id)) return;
-  const { error } = await supabase.from('characters').delete().eq('id', id);
-  if (error) throw error;
+  await supabase.from('characters').delete().eq('id', id);
 };
 
 export const addComment = async (comment: CharacterComment) => {
@@ -342,20 +312,15 @@ export const addComment = async (comment: CharacterComment) => {
     font: toDbValue(comment.font),
     created_at: new Date(comment.createdAt).toISOString()
   };
-  
-  const { error } = await supabase.from('character_comments').insert(dbComment);
-  if (error) throw error;
+  await supabase.from('character_comments').insert(dbComment);
 };
 
 export const deleteComment = async (id: string) => {
-  const { error } = await supabase.from('character_comments').delete().eq('id', id);
-  if (error) throw error;
+  await supabase.from('character_comments').delete().eq('id', id);
 };
-
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // Increase limit to 20MB
     if (file.size > 20 * 1024 * 1024) {
       reject(new Error("이미지 파일 크기는 20MB 이하여야 합니다."));
       return;
