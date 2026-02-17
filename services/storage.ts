@@ -74,6 +74,39 @@ const toDbValue = <T>(value: T | undefined): T | null => {
   return value === undefined ? null : value;
 };
 
+// --- Helper: Batched Fetching ---
+// Fetches data in small chunks to avoid statement timeouts with large datasets (e.g. Base64 images)
+const fetchBatched = async <T>(table: string, pageSize = 20): Promise<T[]> => {
+  let allData: T[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  // Safety break to prevent infinite loops in weird edge cases
+  const MAX_PAGES = 500; 
+
+  while (hasMore && page < MAX_PAGES) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .order('id', { ascending: true }) // Stable sort is required for pagination
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = [...allData, ...data as unknown as T[]];
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return allData;
+};
+
 // --- Realtime Subscription ---
 export const subscribeToChanges = (onUpdate: () => void) => {
   const channel = supabase.channel('public-db-changes')
@@ -110,12 +143,22 @@ export const loadFullState = async (): Promise<AppState> => {
   const { data: campaignsData, error: campError } = await supabase.from('campaigns').select('*');
   if (campError) throw new Error(`Campaign Load Failed: ${campError.message}`);
 
-  const { data: charData, error: charError } = await supabase.from('characters').select('*');
-  if (charError) throw new Error(`Character Load Failed: ${charError.message}`);
+  // Use batched fetching for heavy tables with REDUCED batch size to prevent timeouts
+  let charData: DbCharacter[] = [];
+  try {
+    charData = await fetchBatched<DbCharacter>('characters', 4); // Reduced from 20 to 4
+  } catch (e: any) {
+    throw new Error(`Character Load Failed: ${e.message}`);
+  }
 
-  const { data: fileData, error: fileError } = await supabase.from('extra_files').select('*');
-  if (fileError) throw new Error(`File Load Failed: ${fileError.message}`);
+  let fileData: DbExtraFile[] = [];
+  try {
+    fileData = await fetchBatched<DbExtraFile>('extra_files', 5); // Reduced from 15 to 5
+  } catch (e: any) {
+    throw new Error(`File Load Failed: ${e.message}`);
+  }
 
+  // Comments are usually text-only, simple fetch is fine
   const { data: commentData, error: commentError } = await supabase.from('character_comments').select('*');
   if (commentError && commentError.code !== '42P01') throw new Error(`Comment Load Failed: ${commentError.message}`);
 
@@ -313,6 +356,17 @@ export const addComment = async (comment: CharacterComment) => {
     created_at: new Date(comment.createdAt).toISOString()
   };
   await supabase.from('character_comments').insert(dbComment);
+};
+
+export const updateComment = async (comment: CharacterComment) => {
+  const dbComment = {
+    user_name: comment.userName,
+    content: comment.content,
+    style_variant: comment.styleVariant,
+    font: toDbValue(comment.font),
+    created_at: new Date(comment.createdAt).toISOString() // Now updates date as well
+  };
+  await supabase.from('character_comments').update(dbComment).eq('id', comment.id);
 };
 
 export const deleteComment = async (id: string) => {

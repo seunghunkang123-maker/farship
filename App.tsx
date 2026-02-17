@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, deleteComment as dbDeleteComment, subscribeToChanges } from './services/storage';
+import { loadFullState, checkDatabaseConnection, saveCharacter as dbSaveCharacter, saveCampaign as dbSaveCampaign, deleteCharacter as dbDeleteCharacter, deleteCampaign as dbDeleteCampaign, saveSettings as dbSaveSettings, addComment as dbAddComment, updateComment as dbUpdateComment, deleteComment as dbDeleteComment, subscribeToChanges } from './services/storage';
 import { AppState, Campaign, Character, CharacterComment } from './types';
 import Layout from './components/Layout';
 import MainDashboard from './components/views/MainDashboard';
@@ -270,6 +270,31 @@ const App: React.FC = () => {
      }
   };
 
+  const handleUpdateComment = async (comment: CharacterComment) => {
+    try {
+      await dbUpdateComment(comment);
+      setData(prev => {
+         if(!prev) return null;
+         const charIndex = prev.characters.findIndex(c => c.id === comment.characterId);
+         if(charIndex === -1) return prev;
+
+         const oldComments = prev.characters[charIndex].comments || [];
+         const updatedComments = oldComments.map(c => c.id === comment.id ? comment : c);
+         
+         const updatedChar = {
+            ...prev.characters[charIndex],
+            comments: updatedComments
+         };
+         
+         const newChars = [...prev.characters];
+         newChars[charIndex] = updatedChar;
+         return { ...prev, characters: newChars };
+      });
+    } catch (e) {
+      handleError(e, "코멘트 수정 실패");
+    }
+  };
+
   const handleDeleteComment = async (commentId: string, characterId: string) => {
     try {
       await dbDeleteComment(commentId);
@@ -403,6 +428,7 @@ const App: React.FC = () => {
           isGlobalReveal={isGlobalReveal}
           onToggleGlobalReveal={toggleGlobalReveal}
           nameRevealedIds={nameRevealedIds}
+          onUpdateCampaign={updateCampaign}
         />
       )}
 
@@ -418,6 +444,7 @@ const App: React.FC = () => {
             setIsCreatingCharacter(false);
           }}
           onAddComment={handleAddComment}
+          onUpdateComment={handleUpdateComment}
           onDeleteComment={handleDeleteComment}
           isGlobalReveal={isGlobalReveal}
           isRevealed={activeCharacterId ? revealedCharacterIds.has(activeCharacterId) : false}

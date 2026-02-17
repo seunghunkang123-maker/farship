@@ -3,7 +3,6 @@ import React, { useState, useMemo } from 'react';
 import { Campaign, Character, DND_CLASSES, SystemType, CORE_MEMBERS } from '../../types';
 import { Icons } from '../ui/Icons';
 import { THEMES, THEME_KEYS } from '../../constants';
-import { saveCampaign } from '../../services/storage';
 
 interface CampaignDashboardProps {
   campaign: Campaign;
@@ -18,6 +17,7 @@ interface CampaignDashboardProps {
   onToggleGlobalReveal: () => void;
   // Name Reveal State
   nameRevealedIds: Set<string>;
+  onUpdateCampaign: (c: Campaign) => void;
 }
 
 const MEMBER_COLORS: Record<string, string> = {
@@ -85,7 +85,8 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   revealedCharacterIds,
   isGlobalReveal,
   onToggleGlobalReveal,
-  nameRevealedIds
+  nameRevealedIds,
+  onUpdateCampaign
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'PC' | 'NPC'>('ALL');
@@ -98,13 +99,8 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   const theme = THEMES[currentThemeKey] || THEMES[THEME_KEYS.ADVENTURE];
 
   const handleThemeChange = async (newThemeKey: string) => {
-    try {
-      await saveCampaign({ ...campaign, theme: newThemeKey });
-      window.location.reload(); 
-    } catch (e) {
-      console.error(e);
-      alert('테마 저장 실패');
-    }
+    // Directly update via parent prop to avoid reload crash and ensure state consistency
+    onUpdateCampaign({ ...campaign, theme: newThemeKey });
   };
 
   const filteredChars = useMemo(() => {
@@ -309,14 +305,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                   return merged.filter(a => !a.isHidden);
                })();
 
-               // Class/Role Info
-               let roleInfo = '';
-               if (campaign.system === SystemType.DND5E && char.dndClass) roleInfo = char.dndClass;
-               else if (campaign.system === SystemType.CYBERPUNK_RED && char.cpredRole) roleInfo = char.cpredRole;
-               else if (campaign.system === SystemType.COC7 && char.customClass) roleInfo = char.customClass; 
-               else if (campaign.system === SystemType.BAND_OF_BLADES && char.customClass) roleInfo = char.customClass;
-               else if (campaign.system === SystemType.OTHER && char.customClass) roleInfo = char.customClass;
-
                // Visual Power Tier (Enhanced)
                const powerVisuals = getPowerVisuals(campaign.system, levelToDisplay, theme.classes.textAccent);
 
@@ -402,7 +390,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                      
                      <div className="flex items-center justify-between mb-2">
                        <p className={`text-xs truncate font-medium ${theme.classes.textSub}`}>
-                         {roleInfo || 'Unassigned'}
+                         {/* Removed Role/Class Text as requested */}
                        </p>
                        
                        {/* Visual Power Tier Gauge (2-Level Steps) */}
