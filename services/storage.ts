@@ -74,58 +74,64 @@ const toDbValue = <T>(value: T | undefined): T | null => {
   return value === undefined ? null : value;
 };
 
-// --- Helper: Batched Fetching with Retry ---
-// Fetches data in small chunks with retry logic to avoid timeouts on unstable connections or heavy payloads
-const fetchBatched = async <T>(table: string, pageSize = 5): Promise<T[]> => {
-  let allData: T[] = [];
-  let page = 0;
-  let hasMore = true;
+// --- Helper: Fetch Range with Retry ---
+// Fetches a specific range of data with retry logic.
+const fetchRangeWithRetry = async <T>(table: string, from: number, to: number, maxRetries = 3): Promise<T[]> => {
+  let attempts = 0;
+  while (attempts < maxRetries) {
+    try {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .order('id', { ascending: true })
+        .range(from, to);
 
-  // Safety break to prevent infinite loops
-  const MAX_PAGES = 1000; 
-
-  while (hasMore && page < MAX_PAGES) {
-    let attempts = 0;
-    let success = false;
-    let lastError: any = null;
-
-    // Retry up to 3 times for each batch
-    while (attempts < 3 && !success) {
-      try {
-        const { data, error } = await supabase
-          .from(table)
-          .select('*')
-          .order('id', { ascending: true }) // Stable sort is required for pagination
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allData = [...allData, ...data as unknown as T[]];
-          if (data.length < pageSize) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        } else {
-          hasMore = false;
-        }
-        success = true;
-      } catch (e) {
-        lastError = e;
-        attempts++;
-        console.warn(`Fetch retry ${attempts}/3 for ${table} (Page ${page}) due to error:`, e);
-        // Exponential backoff: 500ms, 1000ms, 1500ms
-        await new Promise(resolve => setTimeout(resolve, attempts * 500));
-      }
-    }
-
-    if (!success) {
-      console.error(`Failed to load batch for ${table} after 3 attempts.`);
-      throw lastError || new Error(`Failed to load ${table}`);
+      if (error) throw error;
+      return (data as unknown as T[]) || [];
+    } catch (e) {
+      attempts++;
+      console.warn(`Fetch retry ${attempts}/${maxRetries} for ${table} [${from}-${to}]`, e);
+      if (attempts >= maxRetries) throw e;
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, attempts * 300));
     }
   }
-  return allData;
+  return [];
+};
+
+// --- Helper: Parallel Batched Fetching ---
+// 1. Gets total count.
+// 2. Calculates ranges.
+// 3. Fetches all ranges in parallel using Promise.all
+const fetchTableData = async <T>(table: string, pageSize = 20): Promise<T[]> => {
+  try {
+    // 1. Get exact count first (lightweight)
+    const { count, error } = await supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true });
+
+    if (error) throw error;
+    if (count === null || count === 0) return [];
+
+    // 2. Prepare ranges
+    const ranges: { from: number; to: number }[] = [];
+    for (let i = 0; i < count; i += pageSize) {
+      ranges.push({ from: i, to: Math.min(i + pageSize - 1, count - 1) });
+    }
+
+    // 3. Execute all fetches in parallel
+    // Modern browsers/HTTP2 allow multiple concurrent requests. 
+    // Supabase handles this well.
+    const results = await Promise.all(
+      ranges.map(range => fetchRangeWithRetry<T>(table, range.from, range.to))
+    );
+
+    // Flatten results
+    return results.flat();
+  } catch (e) {
+    console.error(`Failed to fetch table ${table}`, e);
+    throw e;
+  }
 };
 
 // --- Realtime Subscription ---
@@ -155,8 +161,7 @@ export const checkDatabaseConnection = async () => {
 };
 
 export const loadFullState = async (): Promise<AppState> => {
-  // CRITICAL: Load Settings separately and safely. 
-  // If settings table is missing or errors, we shouldn't fail the whole app load if possible (use defaults).
+  // 1. Load Settings (Metadata - fast)
   let settingsData: any = null;
   try {
     const { data, error } = await supabase.from('settings').select('*').maybeSingle();
@@ -166,32 +171,24 @@ export const loadFullState = async (): Promise<AppState> => {
     console.warn('Settings table access failed, using defaults.', e);
   }
 
-  // Load Campaigns
-  // Campaigns are metadata, usually light, so we can fetch them directly.
+  // 2. Load Campaigns (Metadata - fast)
   const { data: campaignsData, error: campError } = await supabase.from('campaigns').select('*');
   if (campError) throw new Error(`Campaign Load Failed: ${campError.message}`);
 
-  // Load Heavy Data (Characters & Files) using Retry-enabled Batched Fetching
-  let charData: DbCharacter[] = [];
-  try {
-    // Keep batch size small (6) to balance request count vs payload size (Base64 images)
-    charData = await fetchBatched<DbCharacter>('characters', 6); 
-  } catch (e: any) {
-    throw new Error(`Character Load Failed: ${e.message}`);
-  }
+  // 3. Load Heavy Data (Characters & Files) using Parallel Fetching
+  // Increased batch sizes because we are fetching in parallel.
+  // Characters: 20 per request (Text + Base64 Thumbnails if any)
+  // Files: 10 per request (Heavy Base64)
+  
+  const [charData, fileData, commentDataResult] = await Promise.all([
+    fetchTableData<DbCharacter>('characters', 20),
+    fetchTableData<DbExtraFile>('extra_files', 10),
+    supabase.from('character_comments').select('*') // Comments are usually text-only and fast
+  ]);
 
-  let fileData: DbExtraFile[] = [];
-  try {
-    // Files are the heaviest. Keep batch size very conservative (5)
-    fileData = await fetchBatched<DbExtraFile>('extra_files', 5); 
-  } catch (e: any) {
-    throw new Error(`File Load Failed: ${e.message}`);
+  if (commentDataResult.error && commentDataResult.error.code !== '42P01') {
+    throw new Error(`Comment Load Failed: ${commentDataResult.error.message}`);
   }
-
-  // Load Comments (Text only, usually safe to fetch all unless massive)
-  // If comments are huge, convert to fetchBatched as well, but usually fine.
-  const { data: commentData, error: commentError } = await supabase.from('character_comments').select('*');
-  if (commentError && commentError.code !== '42P01') throw new Error(`Comment Load Failed: ${commentError.message}`);
 
   const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
     id: c.id,
@@ -206,9 +203,10 @@ export const loadFullState = async (): Promise<AppState> => {
   }));
 
   const files = (fileData || []) as DbExtraFile[];
-  const comments = (commentData || []) as DbComment[];
+  const comments = (commentDataResult.data || []) as DbComment[];
+  const dbCharacters = (charData || []) as DbCharacter[];
 
-  const characters: Character[] = (charData || []).map((c: DbCharacter) => {
+  const characters: Character[] = dbCharacters.map((c: DbCharacter) => {
     const myFiles: ExtraFile[] = files
       .filter(f => f.character_id === c.id)
       .map(f => ({
@@ -268,8 +266,6 @@ export const loadFullState = async (): Promise<AppState> => {
     };
   });
 
-  // Only return INITIAL_STATE if specifically configured (no campaigns in DB AND no settings)
-  // This distinguishes "Empty DB" from "Failed Fetch"
   if (campaigns.length === 0 && (!settingsData || !settingsData.password)) {
       return INITIAL_STATE;
   }
