@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation, CombatStat } from '../../types';
 import { Icons } from '../ui/Icons';
-import { fileToBase64 } from '../../services/storage';
+import { uploadImage } from '../../services/upload';
 import { THEMES, THEME_KEYS } from '../../constants';
 
 // --- Colors Constant ---
@@ -33,96 +33,92 @@ const COMMENT_FONTS = {
   'FANTASY': { label: '판타지 (Fantasy)', class: 'font-fantasy' }
 };
 
-const RadarChart: React.FC<{ stats: CombatStat[], themeColor: string }> = ({ stats, themeColor }) => {
-  const size = 220;
-  const center = size / 2;
-  const radius = center * 0.65;
-  const sides = 6;
-  const levels = 5;
-
-  const getPoint = (i: number, val: number, max: number) => {
-    const angle = (Math.PI * 2 * i) / sides - Math.PI / 2;
-    const r = (radius * val) / max;
-    return [center + r * Math.cos(angle), center + r * Math.sin(angle)];
-  };
-
-  const gridLines = [];
-  for (let l = 1; l <= levels; l++) {
-    const pts = [];
-    for (let i = 0; i < sides; i++) {
-      const [x, y] = getPoint(i, l, levels);
-      pts.push(`${x},${y}`);
-    }
-    gridLines.push(
-      <polygon 
-        key={l} 
-        points={pts.join(' ')} 
-        fill="none" 
-        stroke="rgba(255,255,255,0.15)" 
-        strokeWidth={l === levels ? "2" : "0.5"} 
-      />
+// --- Radar Chart Component ---
+const RadarChart: React.FC<{ stats: CombatStat[]; themeColor: string }> = ({ stats, themeColor }) => {
+  if (!stats || stats.length < 3) {
+    return (
+      <div className="w-full aspect-square flex items-center justify-center bg-black/20 rounded-xl border border-dashed border-stone-800">
+        <span className="text-xs text-stone-500">통계 데이터 부족 (3개 이상 필요)</span>
+      </div>
     );
   }
 
-  const dataPoints = stats.map((s, i) => getPoint(i, s.value, levels));
-  const dataPath = dataPoints.map(p => p.join(',')).join(' ');
+  const size = 300;
+  const center = size / 2;
+  const radius = (size / 2) - 40;
+  const maxVal = 5;
 
-  const labelPoints = stats.map((s, i) => {
-    const [x, y] = getPoint(i, levels + 1.2, levels);
-    return { x, y, name: s.name };
-  });
+  const getPoint = (value: number, index: number, total: number) => {
+    const angle = (Math.PI * 2 * index) / total - (Math.PI / 2);
+    const r = (value / maxVal) * radius;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle)
+    };
+  };
 
-  const brightChartColor = "#fbbf24"; 
+  const points = stats.map((s, i) => getPoint(s.value, i, stats.length));
+  const polyPoints = points.map(p => `${p.x},${p.y}`).join(' ');
 
   return (
-    <div className="relative flex justify-center py-6">
-      <svg width="0" height="0">
-        <filter id="hyperglow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="4" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
+    <div className={`flex flex-col items-center justify-center w-full py-4 ${themeColor}`}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} className="max-w-[300px] overflow-visible">
+        {/* Grids */}
+        {[1, 2, 3, 4, 5].map(level => (
+          <polygon
+            key={level}
+            points={stats.map((_, i) => {
+              const p = getPoint(level, i, stats.length);
+              return `${p.x},${p.y}`;
+            }).join(' ')}
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity={0.2}
+            strokeWidth={1}
+            className="text-stone-500"
+          />
+        ))}
+
+        {/* Axes */}
+        {points.map((p, i) => (
+           <line key={i} x1={center} y1={center} x2={p.x} y2={p.y} stroke="currentColor" strokeOpacity={0.2} className="text-stone-500" />
+        ))}
+
+        {/* Shape */}
+        <polygon points={polyPoints} fill="currentColor" fillOpacity={0.2} stroke="currentColor" strokeWidth={2} />
+
+        {/* Dots */}
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={4} fill="currentColor" />
+        ))}
+
+        {/* Labels */}
+        {stats.map((s, i) => {
+          const lp = getPoint(maxVal + 0.8, i, stats.length);
+          return (
+            <text
+              key={i}
+              x={lp.x}
+              y={lp.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className="text-[10px] font-bold fill-stone-400 uppercase"
+            >
+              {s.name}
+            </text>
+          );
+        })}
       </svg>
       
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
-        {gridLines}
-        {stats.map((_, i) => {
-          const [x, y] = getPoint(i, levels, levels);
-          return <line key={i} x1={center} y1={center} x2={x} y2={y} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />;
-        })}
-        
-        <polygon 
-          points={dataPath} 
-          fill={`${brightChartColor}44`} 
-          stroke={brightChartColor} 
-          strokeWidth="4" 
-          filter="url(#hyperglow)"
-          className="transition-all duration-700 ease-out"
-        />
-        
-        {dataPoints.map((p, i) => (
-          <g key={i}>
-            <circle cx={p[0]} cy={p[1]} r="6" fill={brightChartColor} className="opacity-20 animate-pulse" />
-            <circle cx={p[0]} cy={p[1]} r="3" fill={brightChartColor} />
-            <circle cx={p[0]} cy={p[1]} r="1.5" fill="white" />
-          </g>
+      {/* Legend / Values */}
+      <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-1">
+        {stats.map(s => (
+          <div key={s.name} className="flex justify-between items-center text-xs w-24">
+             <span className="text-stone-500 truncate mr-2">{s.name}</span>
+             <span className="font-bold opacity-80">{s.value}</span>
+          </div>
         ))}
-        
-        {labelPoints.map((p, i) => (
-          <text 
-            key={i} 
-            x={p.x} 
-            y={p.y} 
-            textAnchor="middle" 
-            fill="white" 
-            fontSize="11" 
-            fontWeight="900" 
-            dominantBaseline="middle" 
-            className="opacity-80 uppercase tracking-widest font-black"
-          >
-            {p.name}
-          </text>
-        ))}
-      </svg>
+      </div>
     </div>
   );
 };
@@ -144,7 +140,11 @@ const EditableField: React.FC<EditableFieldProps> = ({
   label, value, onChange, isEditing, type = 'text', options = [], placeholder = '', isSecretField = false, themeClasses, highlight = false
 }) => {
   const [isRevealed, setIsRevealed] = useState(false);
-  const displayClass = highlight ? 'text-amber-400 font-bold' : themeClasses.textMain;
+  
+  const displayClass = highlight ? `${themeClasses.textAccent} font-bold` : themeClasses.textMain;
+  const inputBorderClass = highlight 
+    ? `border-transparent ring-1 ring-opacity-50 ${themeClasses.border.replace('border-', 'ring-')}` 
+    : themeClasses.border;
 
   if (!isEditing) {
     if (type === 'toggle') return null;
@@ -168,13 +168,15 @@ const EditableField: React.FC<EditableFieldProps> = ({
       </div>
     );
   }
+  
   return (
     <div className="mb-4">
-      <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block ${highlight ? 'text-amber-500' : themeClasses.textAccent}`}>
-        {label} {highlight && <span className="text-[9px] bg-amber-900/50 px-1 rounded ml-1 tracking-normal">SECURE</span>}
+      <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block flex items-center gap-2 ${highlight ? themeClasses.textAccent : themeClasses.textSub}`}>
+        {label} 
+        {highlight && <span className={`text-[9px] px-1.5 py-0.5 rounded border ${themeClasses.border} bg-black/30 tracking-normal`}>SECURE</span>}
       </label>
-      {type === 'text' && <input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={`w-full bg-black/40 border ${highlight ? 'border-amber-700 focus:border-amber-500' : themeClasses.border} rounded-lg p-2.5 focus:border-opacity-100 focus:outline-none placeholder:opacity-20 text-sm ${themeClasses.textMain}`} placeholder={placeholder}/>}
-      {type === 'textarea' && <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} className={`w-full h-32 bg-black/40 border ${highlight ? 'border-amber-700 focus:border-amber-500' : themeClasses.border} rounded-lg p-3 focus:border-opacity-100 focus:outline-none resize-none placeholder:opacity-20 text-sm leading-relaxed ${themeClasses.textMain}`} placeholder={placeholder}/>}
+      {type === 'text' && <input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={`w-full bg-black/40 border rounded-lg p-2.5 focus:border-opacity-100 focus:outline-none placeholder:opacity-20 text-sm ${themeClasses.textMain} ${highlight ? `border-current ring-1 ring-white/10 ${themeClasses.textAccent}` : themeClasses.border}`} placeholder={placeholder}/>}
+      {type === 'textarea' && <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} className={`w-full h-32 bg-black/40 border rounded-lg p-3 focus:border-opacity-100 focus:outline-none resize-none placeholder:opacity-20 text-sm leading-relaxed ${themeClasses.textMain} ${highlight ? `border-current ring-1 ring-white/10 ${themeClasses.textAccent}` : themeClasses.border}`} placeholder={placeholder}/>}
       {type === 'select' && <select value={value} onChange={(e) => onChange(e.target.value)} className={`w-full bg-black/40 border ${themeClasses.border} rounded-lg p-2.5 focus:border-opacity-100 focus:outline-none text-sm ${themeClasses.textMain}`}>{options.map((opt) => <option key={opt.value} value={opt.value} className="bg-stone-900 text-stone-200">{opt.label}</option>)}</select>}
       {type === 'toggle' && <div className="flex gap-2 p-1 bg-black/20 rounded-lg w-fit"><button onClick={() => onChange(false)} className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${!value ? 'bg-emerald-600 text-white shadow-lg' : 'text-stone-500'}`}>PC</button><button onClick={() => onChange(true)} className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${value ? 'bg-amber-600 text-white shadow-lg' : 'text-stone-500'}`}>NPC</button></div>}
     </div>
@@ -221,9 +223,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
-  // Comment Editing (New)
+  // Comment Editing
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  // Temporary state for editing a specific comment
   const [tempEditComment, setTempEditComment] = useState<CharacterComment | null>(null);
   const [tempEditDate, setTempEditDate] = useState('');
 
@@ -246,26 +247,21 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     updatedAt: Date.now(), alias: '', isNameBlurred: false, affiliations: []
   });
 
-  // Sync with Props, BUT PROTECT EDITING STATE
   useEffect(() => {
     if (character) {
-      // CRITICAL FIX: If user is actively editing, DO NOT overwrite with incoming realtime changes.
-      // This prevents typing from disappearing if another device triggers a save.
       if (!isEditing) {
         setFormData(character);
         const isMember = CORE_MEMBERS.includes(character.playerName || '');
         setIsGuestPlayer(!isMember && !!character.playerName);
         setShowAliasInput(!!character.alias);
         setShowSecretAliasInput(!!character.secretProfile?.alias);
-        // Only reset ids if we are truly switching characters, not just refreshing the same one
         if (formData.id !== character.id) {
            setRevealedIds(new Set()); 
            setEditLayer('PUBLIC');
         }
       }
     } else {
-      // Creating new
-      if (formData.id === '') { // Only init if empty
+      if (formData.id === '') { 
         setFormData({
           id: crypto.randomUUID(), campaignId: campaign.id, name: '', realName: '', playerName: CORE_MEMBERS[0],
           isNpc: false, imageFit: 'cover', summary: '', description: '', extraFiles: [], comments: [], updatedAt: Date.now(),
@@ -282,7 +278,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         setEditLayer('PUBLIC');
       }
     }
-  }, [character, campaign, isEditing]); // Add isEditing to deps to re-eval if edit mode toggles
+  }, [character, campaign, isEditing]);
 
   const handleToggleReveal = () => {
     if (isGlobalReveal) return;
@@ -293,9 +289,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetLayer: 'PUBLIC' | 'SECRET') => {
     if (e.target.files && e.target.files[0]) {
-      const base64 = await fileToBase64(e.target.files[0]);
-      if (targetLayer === 'PUBLIC') setFormData(prev => ({ ...prev, imageUrl: base64 }));
-      else updateSecretField('image_url', base64);
+      try {
+        const url = await uploadImage(e.target.files[0]);
+        if (targetLayer === 'PUBLIC') setFormData(prev => ({ ...prev, imageUrl: url }));
+        else updateSecretField('image_url', url);
+      } catch (error) {
+        alert("이미지 업로드 실패: " + (error as Error).message);
+      }
     }
   };
 
@@ -315,8 +315,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     }
 
     onSave({ ...finalData, updatedAt: Date.now() });
-    
-    // Fix: Reset edit layer to PUBLIC to prevent yellow text flash after save
     setEditLayer('PUBLIC');
     setIsEditing(false);
   };
@@ -532,8 +530,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const handleExtraImageUpload = async (fileId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const base64 = await fileToBase64(e.target.files[0]);
-      updateExtraFile(fileId, 'imageUrl', base64);
+      try {
+        const url = await uploadImage(e.target.files[0]);
+        updateExtraFile(fileId, 'imageUrl', url);
+      } catch (error) {
+        alert("이미지 업로드 실패: " + (error as Error).message);
+      }
     }
   };
 
@@ -547,7 +549,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   };
 
   const toggleSecret = (fileId: string, isSecret: boolean) => updateExtraFile(fileId, 'isSecret', isSecret);
-  const revealSecret = (fileId: string) => setRevealedIds(prev => { const next = new Set(prev); next.add(fileId); return next; });
 
   const submitComment = () => {
     if (!commentText.trim()) return;
@@ -576,11 +577,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     setCommentText('');
   };
 
-  // Direct Comment Editing
   const startEditingComment = (comment: CharacterComment) => {
     setEditingCommentId(comment.id);
     setTempEditComment({ ...comment });
-    // Convert timestamp to YYYY-MM-DD for date input
     setTempEditDate(new Date(comment.createdAt).toISOString().split('T')[0]);
   };
 
@@ -592,8 +591,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const saveEditingComment = () => {
     if (!tempEditComment) return;
-    
-    // Update date in the object
     const updatedTime = tempEditDate ? new Date(tempEditDate).getTime() : tempEditComment.createdAt;
     const updatedComment = { ...tempEditComment, createdAt: updatedTime };
     
@@ -630,11 +627,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       }
     }
   };
-
-  let displayRole = '';
-  if (campaign.system === SystemType.DND5E) displayRole = formData.dndClass || '';
-  else if (campaign.system === SystemType.CYBERPUNK_RED) displayRole = formData.cpredRole || '';
-  else displayRole = formData.customClass || '';
 
   const activePortraitFile = useMemo(() => {
     const candidates = currentFiles.filter(f => f.useAsPortrait && f.imageUrl);
@@ -679,38 +671,22 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     }
   }, [isEditing, editLayer, isSecretRevealed, formData]);
 
-  const subHeaderName = useMemo(() => {
-     if (isEditing) return null;
-     if (isSecretRevealed) {
-        if (formData.secretProfile?.alias) {
-           return <span className="opacity-70 transition-all duration-300 text-amber-500/80">{formData.secretProfile.name || formData.name}</span>;
-        }
-        return null;
-     } 
-     if (formData.alias) {
-        if (formData.isNameBlurred && !isNameRevealed) return <span className="blur-sm select-none opacity-50 transition-all duration-300">{formData.name}</span>;
-        return <span className="opacity-70 transition-all duration-300 text-amber-500/80">{formData.name}</span>;
-     }
-     return null;
-  }, [isEditing, isSecretRevealed, formData, isNameRevealed]);
   
   return (
     <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-md flex justify-center items-start md:items-center p-0 md:p-4 overflow-y-auto md:overflow-hidden">
       <div 
         onClick={(e) => e.stopPropagation()} 
-        className={`w-full min-h-full md:min-h-0 md:h-[95vh] md:max-w-[95vw] md:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border flex flex-col md:flex-row transition-all duration-500 ${tc.bgMain} ${isSecretRevealed ? 'border-amber-600/50' : tc.border}`}
+        className={`w-full min-h-full md:min-h-0 md:h-[95vh] md:max-w-[95vw] md:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border flex flex-col md:flex-row transition-all duration-500 ${tc.bgMain} ${isSecretRevealed ? `border-current ${tc.textAccent}` : tc.border}`}
       >
         
         {/* Left Column - Portrait & Status (Sidebar) */}
-        {/* Changed width to 512px on MD screens to accommodate 512x512 image requirements */}
         <div className={`w-full md:w-[512px] p-6 md:p-8 flex flex-col border-r shrink-0 ${tc.bgPanel} ${tc.border} md:overflow-y-auto custom-scrollbar`}>
           <div className="flex justify-between md:hidden mb-6">
             <button onClick={onClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
             <button onClick={handleSave} className="px-4 py-2 bg-amber-700 text-white rounded-lg font-black text-xs">저장</button>
           </div>
           
-          {/* Portrait Container: 1:1 Aspect Ratio, Max width 512px, Mobile limited width to avoid screen takeover */}
-          <div className={`relative w-full max-w-[320px] md:max-w-[512px] aspect-square mx-auto rounded-xl overflow-hidden mb-8 group border-2 shadow-2xl transition-all ${isSecretRevealed ? 'border-amber-500 shadow-amber-900/20' : 'border-stone-800'} bg-stone-900/50`}>
+          <div className={`relative w-full max-w-[320px] md:max-w-[512px] aspect-square mx-auto rounded-xl overflow-hidden mb-8 group border-2 shadow-2xl transition-all ${isSecretRevealed ? `border-current ${tc.textAccent} shadow-[0_0_30px_rgba(0,0,0,0.3)]` : 'border-stone-800'} bg-stone-900/50`}>
             {displayImageUrl ? (
               <img src={displayImageUrl} alt={formData.name} className={`w-full h-full object-top transition-transform duration-1000 group-hover:scale-110 ${formData.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
             ) : <div className={`w-full h-full flex items-center justify-center opacity-10 ${tc.textSub}`}><Icons.User size={100} strokeWidth={1} /></div>}
@@ -738,7 +714,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     <button onClick={() => setFormData(p => ({...p, imageFit: 'contain'}))} className={`px-3 py-1 text-[10px] font-bold rounded uppercase ${formData.imageFit==='contain' ? 'bg-stone-700 text-white shadow-sm' : 'text-stone-500'}`}>Fit</button>
                   </div>
                 )}
-                {/* NPC Toggle in Sidebar (for convenience) */}
                 <div className="flex justify-center mt-2">
                    <div className="flex gap-2 p-1 bg-black/20 rounded-lg w-fit border border-stone-800">
                       <button onClick={() => setFormData(p => ({...p, isNpc: false}))} className={`px-6 py-2 rounded-md text-xs font-black transition-all uppercase tracking-wider ${!formData.isNpc ? 'bg-emerald-700 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}>PC (Player)</button>
@@ -749,7 +724,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           )}
 
           <div className="text-center">
-             <h2 className={`text-3xl font-black mb-3 tracking-tighter transition-colors ${isSecretRevealed ? 'text-amber-400' : tc.textMain}`}>{headerName}</h2>
+             <h2 className={`text-3xl font-black mb-3 tracking-tighter transition-colors ${isSecretRevealed ? tc.textAccent : tc.textMain}`}>{headerName}</h2>
              <div className="flex items-center justify-center gap-2 mb-6">
                 <span className={`px-2.5 py-1 text-[10px] font-black rounded uppercase tracking-widest ${formData.isNpc ? 'bg-amber-700 text-amber-100' : 'bg-emerald-700 text-emerald-100'}`}>{formData.isNpc ? 'NPC' : 'PC (PLAYER)'}</span>
                 <span className="text-sm font-black text-amber-500 font-mono tracking-tighter">{resolveValue('levelOrExp', 'levelOrExp')}</span>
@@ -764,7 +739,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                 </div>
              )}
 
-             {/* Editable Summary Field */}
              <div className="text-left mt-6 mb-6">
                 <EditableField 
                   label="한 줄 소개 (Summary)" 
@@ -778,7 +752,11 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
              </div>
 
              {hasSecretProfile && !isEditing && (
-               <button onClick={handleToggleReveal} disabled={isGlobalReveal} className={`w-full py-3 rounded-xl border text-[11px] font-black tracking-[0.2em] transition-all uppercase ${isSecretRevealed ? 'bg-amber-950 text-amber-500 border-amber-600 shadow-lg shadow-amber-900/20' : 'bg-black/40 text-stone-600 border-stone-800'}`}>
+               <button 
+                  onClick={handleToggleReveal} 
+                  disabled={isGlobalReveal} 
+                  className={`w-full py-3 rounded-xl border text-[11px] font-black tracking-[0.2em] transition-all uppercase ${isSecretRevealed ? `bg-black/80 ${tc.textAccent} border-current shadow-lg` : 'bg-black/40 text-stone-600 border-stone-800'}`}
+               >
                  {isGlobalReveal ? 'Global Override Active' : (isSecretRevealed ? 'Archive Decrypted' : 'Decrypt Records')}
                </button>
              )}
@@ -787,7 +765,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
         {/* Right Column - Tabs & Content */}
         <div className="flex-1 flex flex-col relative md:h-full md:overflow-hidden">
-          {/* Header/Tabs Navigation */}
           <div className={`sticky top-0 z-20 flex flex-col md:flex-row justify-between p-3 md:px-8 md:py-4 border-b ${tc.bgPanel} ${tc.border} backdrop-blur-xl shrink-0`}>
              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
                {['INFO', 'BIO', 'FILES', 'COMMENTS'].map(tab => (
@@ -799,11 +776,21 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                {isEditing && (
                  <div className="flex items-center gap-1 bg-black/40 rounded-xl p-1 border border-stone-800">
                     <button onClick={() => setEditLayer('PUBLIC')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${editLayer === 'PUBLIC' ? 'bg-stone-700 text-white shadow-lg' : 'text-stone-500'}`}>PUBLIC</button>
-                    <button onClick={() => setEditLayer('SECRET')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${editLayer === 'SECRET' ? 'bg-amber-800 text-amber-100 shadow-lg' : 'text-stone-500'}`}>SECRET</button>
+                    {/* Secret Button - Dynamic Color */}
+                    <button onClick={() => setEditLayer('SECRET')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${editLayer === 'SECRET' ? `bg-black text-white shadow-lg ring-1 ring-white/20` : 'text-stone-500'}`}>SECRET</button>
                  </div>
                )}
                <div className="hidden md:flex items-center gap-3">
-                 {isEditing ? <button onClick={handleSave} className="px-6 py-2 bg-amber-700 text-white rounded-xl font-black text-xs tracking-widest hover:bg-amber-600 transition-colors">변경사항 저장</button> : <button onClick={() => setIsEditing(true)} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Edit size={22} /></button>}
+                 {isEditing ? (
+                   <>
+                     <button onClick={() => onDelete(formData.id)} className="p-2 text-red-500/50 hover:text-red-500 transition-colors bg-red-950/10 hover:bg-red-950/30 rounded-lg border border-transparent hover:border-red-900/30" title="캐릭터 삭제">
+                        <Icons.Trash size={20} />
+                     </button>
+                     <button onClick={handleSave} className="px-6 py-2 bg-amber-700 text-white rounded-xl font-black text-xs tracking-widest hover:bg-amber-600 transition-colors">변경사항 저장</button>
+                   </>
+                 ) : (
+                   <button onClick={() => setIsEditing(true)} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Edit size={22} /></button>
+                 )}
                  <button onClick={onClose} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Close size={24} /></button>
                </div>
              </div>
@@ -813,13 +800,11 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'INFO' && (
               <div className="space-y-10 max-w-3xl">
                  <div className="grid md:grid-cols-2 gap-8">
-                    {/* Identity Logic reused from previous block but simplified for visual */}
                     <div className="col-span-2 md:col-span-1 space-y-6">
                        {isEditing ? (
                           <>
                            {editLayer === 'PUBLIC' ? (
                              <>
-                               {/* NPC Toggle Added Here for Visibility */}
                                <div className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-stone-800 mb-2">
                                   <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Character Type</span>
                                   <div className="flex bg-black/40 rounded-lg p-1 border border-stone-800">
@@ -854,7 +839,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                         <div className={`w-3 h-3 bg-white rounded-full transition-transform ${showSecretAliasInput ? 'translate-x-4' : 'translate-x-0'}`} />
                                      </div>
                                      <input type="checkbox" checked={showSecretAliasInput} onChange={(e) => setShowSecretAliasInput(e.target.checked)} className="hidden" />
-                                     <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">Enable Secret Alias</span>
+                                     <span className={`text-[10px] font-black uppercase tracking-widest ${tc.textAccent}`}>Enable Secret Alias</span>
                                   </label>
                                </div>
                                {showSecretAliasInput && <EditableField label={`${aliasLabel} (SECRET)`} value={formData.secretProfile?.alias} onChange={(v) => updateSecretField('alias', v)} isEditing={true} themeClasses={tc} highlight={true} />}
@@ -868,7 +853,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                               <>
                                  {formData.secretProfile?.alias && (
                                    <div className="mb-6">
-                                      <label className="text-[10px] font-black uppercase tracking-[0.2em] mb-1 block text-amber-500">{aliasLabel}</label>
+                                      <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block ${tc.textAccent}`}>{aliasLabel}</label>
                                       <div className="text-xl font-black text-amber-100">{formData.secretProfile.alias}</div>
                                    </div>
                                  )}
@@ -918,16 +903,21 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                  </div>
 
                  <div className="p-6 bg-black/30 rounded-2xl border border-stone-800">
-                    <label className={`text-[10px] font-black uppercase tracking-[0.3em] mb-4 block ${isEditing && editLayer === 'SECRET' ? 'text-amber-500' : tc.textSub}`}>소속 및 태그 (AFFILIATION) {isEditing && editLayer === 'SECRET' && <span className="text-[9px] bg-amber-900/50 px-1 rounded ml-1 tracking-normal">SECURE EDIT</span>}</label>
+                    <label className={`text-[10px] font-black uppercase tracking-[0.3em] mb-4 block ${isEditing && editLayer === 'SECRET' ? tc.textAccent : tc.textSub}`}>소속 및 태그 (AFFILIATION) {isEditing && editLayer === 'SECRET' && <span className="text-[9px] bg-black/30 px-1 rounded ml-1 tracking-normal border border-white/20">SECURE EDIT</span>}</label>
                     {isEditing ? (
                        <div className="space-y-4">
                           <div className="flex flex-wrap gap-2">
                              {currentAffiliations.map((aff, index) => {
                                 const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
                                 const isSecretStyle = !isPublicRef && editLayer === 'SECRET';
+                                // Dynamic Secret Tag Style
+                                const tagStyle = isSecretStyle 
+                                   ? `border-current ${tc.textAccent} ring-1 ring-white/10` 
+                                   : 'border-stone-700 text-stone-200';
+                                
                                 return (
                                 <div key={aff.id} draggable onDragStart={() => handleDragStart(index)} onDragEnter={() => handleDragEnter(index)} onDragEnd={handleDragEnd} onDragOver={(e) => e.preventDefault()}
-                                   className={`flex items-center gap-3 bg-stone-900 border rounded-xl pl-4 pr-2 py-2 text-xs font-bold cursor-move ${aff.isHidden ? 'opacity-40 border-dashed' : ''} ${isSecretStyle ? 'border-amber-700/50 text-amber-100' : 'border-stone-700'}`}>
+                                   className={`flex items-center gap-3 bg-stone-900 border rounded-xl pl-4 pr-2 py-2 text-xs font-bold cursor-move ${aff.isHidden ? 'opacity-40 border-dashed' : ''} ${tagStyle}`}>
                                    <span>{aff.name} <span className="opacity-50 font-normal">{aff.rank && `| ${aff.rank}`}</span></span>
                                    <div className="flex items-center gap-1 border-l border-stone-800 pl-2">
                                       {editLayer === 'SECRET' && (
@@ -954,7 +944,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                              const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
                              const isSecretStyle = !isPublicRef && (isSecretRevealed || editLayer === 'SECRET');
                              return (
-                             <span key={aff.id} className={`px-4 py-1.5 rounded-full text-[11px] font-black border tracking-tight ${aff.isStrikethrough ? 'line-through opacity-50 decoration-2 decoration-red-500' : ''} ${isSecretStyle ? 'bg-amber-900/30 text-amber-100 border-amber-600/40' : `${tc.bgPanel} ${tc.border} ${tc.textMain}`}`}>
+                             <span key={aff.id} className={`px-4 py-1.5 rounded-full text-[11px] font-black border tracking-tight ${aff.isStrikethrough ? 'line-through opacity-50 decoration-2 decoration-red-500' : ''} ${isSecretStyle ? `bg-black/40 ${tc.textAccent} border-current opacity-90` : `${tc.bgPanel} ${tc.border} ${tc.textMain}`}`}>
                                 {aff.name} {aff.rank && <span className="font-medium opacity-60 ml-1">| {aff.rank}</span>}
                              </span>
                           )})}
@@ -969,7 +959,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                    ))}
                  </div>
 
-                 {/* Appearance Field */}
                  <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} type="textarea" isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
               </div>
             )}
@@ -979,9 +968,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                 <EditableField label="상세 설정 및 전기 (BIOGRAPHY)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} type="textarea" isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
               </div>
             )}
-
+            
             {activeTab === 'FILES' && (
-              <div className="space-y-8 max-w-4xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
+               <div className="space-y-8 max-w-4xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                 {isEditing && <button onClick={addExtraFile} className="w-full py-5 border-2 border-dashed border-stone-800 rounded-2xl flex items-center justify-center gap-3 text-stone-500 hover:text-amber-500 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all font-black text-xs tracking-[0.2em] uppercase"><Icons.Plus size={18}/>새 데이터 노드 추가 (NEW DATA)</button>}
                 
                 {currentFiles.map(file => (
@@ -1002,145 +991,70 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                         )}
                       </div>
                     </div>
-
-                    {file.fileType === 'COMBAT' && (
-                      <div className="mb-10 p-6 md:p-10 bg-black/40 rounded-3xl border border-white/5 overflow-hidden shadow-[inset_0_0_50px_rgba(0,0,0,0.5)]">
-                        <div className="flex flex-col items-center">
-                          <RadarChart stats={file.combatStats || []} themeColor={tc.textAccent.replace('text-', '')} />
-                          {isEditing && (
-                             <div className="w-full mt-10 grid grid-cols-2 md:grid-cols-3 gap-4 p-6 bg-black/20 rounded-2xl border border-white/5">
-                               {file.combatStats?.map((s, i) => (
-                                 <div key={i} className="flex flex-col gap-2 bg-stone-900/50 p-3 rounded-xl border border-white/5">
-                                    <input value={s.name} onChange={e => { const newStats = [...(file.combatStats || [])]; newStats[i].name = e.target.value; updateExtraFile(file.id, 'combatStats', newStats); }} className="bg-transparent border-b border-white/10 text-[10px] font-black text-amber-500 uppercase outline-none focus:border-amber-500"/>
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-[9px] text-stone-600 font-mono">RANK</span>
-                                      <select value={s.value} onChange={e => { const newStats = [...(file.combatStats || [])]; newStats[i].value = parseInt(e.target.value); updateExtraFile(file.id, 'combatStats', newStats); }} className="bg-black text-[10px] text-stone-300 rounded px-2 py-1 focus:outline-none">
-                                        {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
-                                      </select>
-                                    </div>
-                                 </div>
-                               ))}
-                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
+                    
+                    {/* File Content Rendering Logic */}
                     {file.imageUrl && <div className="mb-8 rounded-2xl overflow-hidden shadow-2xl border border-white/5 relative group bg-black/40">
                        <img src={file.imageUrl} className={`w-full ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}/>
-                       
                        {isEditing && (
-                         <>
-                           <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); updateExtraFile(file.id, 'imageFit', 'cover'); }}
-                               className={`px-3 py-1 text-[10px] font-bold rounded backdrop-blur-md uppercase shadow-lg border border-white/10 ${(!file.imageFit || file.imageFit === 'cover') ? 'bg-amber-600 text-white' : 'bg-black/60 text-stone-300 hover:bg-stone-800'}`}
-                             >
-                               Cover
-                             </button>
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); updateExtraFile(file.id, 'imageFit', 'contain'); }}
-                               className={`px-3 py-1 text-[10px] font-bold rounded backdrop-blur-md uppercase shadow-lg border border-white/10 ${file.imageFit === 'contain' ? 'bg-amber-600 text-white' : 'bg-black/60 text-stone-300 hover:bg-stone-800'}`}
-                             >
-                               Fit
-                             </button>
-                           </div>
-                           
                            <button onClick={() => updateExtraFile(file.id, 'imageUrl', '')} className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white p-2 rounded-full backdrop-blur-md border border-white/10 transition-colors"><Icons.Close size={16}/></button>
-                         </>
                        )}
                     </div>}
                     
                     {isEditing && !file.imageUrl && (
                        <div className="mb-6"><label className="flex items-center gap-2 cursor-pointer w-fit px-4 py-2 bg-stone-900 rounded-lg hover:bg-stone-800 text-xs font-bold text-stone-400"><Icons.Image size={16}/> Attach Image <input type="file" accept="image/*" className="hidden" onChange={(e) => handleExtraImageUpload(file.id, e)} /></label></div>
                     )}
-
-                    {isEditing ? (
-                      <textarea value={file.content} onChange={e => updateExtraFile(file.id, 'content', e.target.value)} className="w-full h-40 bg-black/40 border border-stone-800 rounded-xl p-4 text-sm focus:border-amber-500 outline-none transition-colors" placeholder="Enter detailed information..."/>
+                    
+                    {file.fileType === 'COMBAT' ? (
+                      <RadarChart stats={file.combatStats || []} themeColor={tc.textAccent} />
                     ) : (
-                      <p className="text-sm md:text-base opacity-80 whitespace-pre-wrap leading-relaxed px-1 font-serif">{file.content}</p>
+                      isEditing ? (
+                        <textarea value={file.content} onChange={e => updateExtraFile(file.id, 'content', e.target.value)} className="w-full h-40 bg-black/40 border border-stone-800 rounded-xl p-4 text-sm focus:border-amber-500 outline-none transition-colors" placeholder="Enter detailed information..."/>
+                      ) : (
+                        <p className="text-sm md:text-base opacity-80 whitespace-pre-wrap leading-relaxed px-1 font-serif">{file.content}</p>
+                      )
                     )}
                   </div>
                 ))}
-              </div>
+               </div>
             )}
-
+            
             {activeTab === 'COMMENTS' && (
-              <div className="h-full flex flex-col space-y-8 max-w-3xl mx-auto animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
-                 {/* ... (Comments content unchanged) ... */}
-                 <div className="flex-1 space-y-6">
+               <div className="h-full flex flex-col space-y-8 max-w-3xl mx-auto animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
+                  <div className="flex-1 space-y-6">
                     {currentComments.map(c => {
                        const styleConfig = COMMENT_STYLES[c.styleVariant as keyof typeof COMMENT_STYLES] || COMMENT_STYLES['NOTE'];
                        const fontClass = COMMENT_FONTS[c.font as keyof typeof COMMENT_FONTS]?.class || 'font-sans';
-                       
                        return (
                        <div key={c.id} className={`p-5 rounded-xl border shadow-xl transition-all hover:scale-[1.01] group relative ${styleConfig.class}`}>
-                          {editingCommentId === c.id && tempEditComment ? (
-                            <div className="flex flex-col gap-3">
-                               <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
-                                  <span className="text-[10px] font-black uppercase tracking-widest opacity-50">수정 모드 (EDITING)</span>
-                               </div>
-                               <textarea className="w-full bg-black/20 p-3 rounded-lg border border-white/10 text-sm focus:outline-none focus:border-amber-500/50 resize-none h-32" value={tempEditComment.content} onChange={(e) => setTempEditComment({...tempEditComment, content: e.target.value})} />
-                               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                 <select className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none" value={tempEditComment.styleVariant} onChange={e => setTempEditComment({...tempEditComment, styleVariant: e.target.value as any})}>
-                                   {Object.entries(COMMENT_STYLES).map(([key, conf]) => (<option key={key} value={key} className="bg-stone-900">{conf.label}</option>))}
-                                 </select>
-                                 <select className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none" value={tempEditComment.font || 'SANS'} onChange={e => setTempEditComment({...tempEditComment, font: e.target.value})}>
-                                    {Object.entries(COMMENT_FONTS).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}
-                                 </select>
-                                 <input type="date" className="bg-black/30 text-xs rounded px-2 py-1.5 border border-white/10 outline-none" value={tempEditDate} onChange={e => setTempEditDate(e.target.value)} />
-                               </div>
-                               <div className="flex justify-end gap-2 mt-2">
-                                  <button onClick={cancelEditingComment} className="px-3 py-1.5 text-xs bg-black/40 hover:bg-black/60 rounded border border-white/10">취소</button>
-                                  <button onClick={saveEditingComment} className="px-3 py-1.5 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded font-bold shadow-lg">저장</button>
-                               </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex justify-between text-[10px] mb-2 font-mono tracking-widest uppercase border-b border-current/20 pb-2">
-                                 <div className="flex items-center gap-2">
-                                    <span className="font-black opacity-90">{c.userName}</span>
-                                    <span className="opacity-40">|</span>
-                                    <span className="opacity-60">{styleConfig.label.split('(')[0].trim()}</span>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                    <span className="opacity-60">{new Date(c.createdAt).toLocaleDateString()}</span>
-                                    {(isEditing || isSecretRevealed) && (
-                                       <div className="flex items-center gap-1 ml-2">
-                                          <button onClick={() => startEditingComment(c)} className="opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-all p-1" title="수정"><Icons.Edit size={12} /></button>
-                                          <button onClick={() => confirmDeleteComment(c.id)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all p-1" title="삭제"><Icons.Close size={12}/></button>
-                                       </div>
-                                    )}
-                                 </div>
-                              </div>
-                              <p className={`text-sm leading-relaxed whitespace-pre-wrap ${fontClass} opacity-90`}>{c.content}</p>
-                            </>
-                          )}
+                          <div className="flex justify-between text-[10px] mb-2 font-mono tracking-widest uppercase border-b border-current/20 pb-2">
+                             <div className="flex items-center gap-2"><span className="font-black opacity-90">{c.userName}</span></div>
+                             <div className="flex items-center gap-2">
+                                <span className="opacity-60">{new Date(c.createdAt).toLocaleDateString()}</span>
+                                {(isEditing || isSecretRevealed) && (
+                                   <div className="flex items-center gap-1 ml-2">
+                                      <button onClick={() => startEditingComment(c)} className="opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-all p-1"><Icons.Edit size={12} /></button>
+                                      <button onClick={() => confirmDeleteComment(c.id)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all p-1"><Icons.Close size={12}/></button>
+                                   </div>
+                                )}
+                             </div>
+                          </div>
+                          <p className={`text-sm leading-relaxed whitespace-pre-wrap ${fontClass} opacity-90`}>{c.content}</p>
                        </div>
                     )})}
                     {currentComments.length === 0 && <div className="text-center py-20 text-stone-700 italic font-serif">기록된 정보가 없습니다.</div>}
                  </div>
-                 
                  <div className="flex flex-col gap-4 p-6 bg-black/40 rounded-3xl border border-white/5 shadow-2xl">
                     <div className="flex flex-col md:flex-row md:items-center gap-3 border-b border-white/5 pb-4">
-                      <div className="flex items-center gap-2 flex-1">
-                         <Icons.Edit size={16} className="text-amber-500" />
-                         <input value={commentName} onChange={e => setCommentName(e.target.value)} className="bg-transparent text-sm font-black uppercase tracking-widest p-1 focus:outline-none text-white w-full md:w-auto" placeholder="작성자 이름"/>
-                      </div>
+                      <div className="flex items-center gap-2 flex-1"><Icons.Edit size={16} className="text-amber-500" /><input value={commentName} onChange={e => setCommentName(e.target.value)} className="bg-transparent text-sm font-black uppercase tracking-widest p-1 focus:outline-none text-white w-full md:w-auto" placeholder="작성자 이름"/></div>
                       <div className="flex flex-wrap items-center gap-2">
-                         <select value={commentStyle} onChange={e => setCommentStyle(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none">
-                            {Object.entries(COMMENT_STYLES).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}
-                         </select>
-                         <select value={commentFont} onChange={e => setCommentFont(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none">
-                            {Object.entries(COMMENT_FONTS).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}
-                         </select>
+                         <select value={commentStyle} onChange={e => setCommentStyle(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none">{Object.entries(COMMENT_STYLES).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}</select>
                          <input type="date" value={commentDate} onChange={e => setCommentDate(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none" />
                       </div>
                     </div>
                     <textarea value={commentText} onChange={e => setCommentText(e.target.value)} className={`bg-transparent text-sm leading-relaxed h-28 focus:outline-none transition-colors resize-none placeholder:opacity-20 ${COMMENT_FONTS[commentFont as keyof typeof COMMENT_FONTS]?.class || 'font-sans'}`} placeholder="새로운 기록을 입력하세요..." />
                     <button onClick={submitComment} className="py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-lg transition-all bg-amber-700 text-white hover:bg-amber-600 active:scale-[0.98]">기록 추가</button>
                  </div>
-              </div>
+               </div>
             )}
           </div>
         </div>

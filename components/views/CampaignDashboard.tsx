@@ -39,7 +39,6 @@ const getLevelNumber = (levelStr?: string): number => {
 };
 
 // --- Power Level Visual Logic (Enhanced) ---
-// Returns: { count: 1-5, tierClass: string, isEpic: boolean }
 const getPowerVisuals = (system: SystemType, levelStr?: string, themeAccent?: string) => {
   if (system !== SystemType.DND5E) return null;
   
@@ -50,27 +49,18 @@ const getPowerVisuals = (system: SystemType, levelStr?: string, themeAccent?: st
   let colorClass = themeAccent || 'text-stone-400';
   let effectClass = '';
 
-  // Scale: 1 Dot = 2 Levels
-  // Lv 1-10: Basic Tier (Color: Theme Accent)
-  // Lv 11-20: Heroic Tier (Color: Purple/Violet)
-  // Lv 21-30: Epic Tier (Color: Rose/Red + Pulse)
-
   if (level <= 10) {
     count = Math.ceil(level / 2);
-    // Use passed theme accent
   } else if (level <= 20) {
     count = Math.ceil((level - 10) / 2);
     colorClass = 'text-purple-400 drop-shadow-[0_0_5px_rgba(192,132,252,0.6)]';
   } else {
-    // Over 20
     count = Math.ceil((level - 20) / 2);
     colorClass = 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.8)]';
     effectClass = 'animate-pulse';
   }
 
-  // Cap at 5 dots
   count = Math.max(1, Math.min(count, 5));
-
   return { count, colorClass, effectClass };
 };
 
@@ -90,8 +80,9 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'PC' | 'NPC'>('ALL');
-  const [sortOrder, setSortOrder] = useState<'NAME' | 'RECENT'>('RECENT');
-  const [showTags, setShowTags] = useState(false); // 태그 보이기 토글 상태
+  const [sortOrder, setSortOrder] = useState<'NAME' | 'RECENT' | 'LEVEL'>('RECENT');
+  const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
+  const [showTags, setShowTags] = useState(false);
   
   // Theme State
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -99,7 +90,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   const theme = THEMES[currentThemeKey] || THEMES[THEME_KEYS.ADVENTURE];
 
   const handleThemeChange = async (newThemeKey: string) => {
-    // Directly update via parent prop to avoid reload crash and ensure state consistency
     onUpdateCampaign({ ...campaign, theme: newThemeKey });
   };
 
@@ -121,6 +111,11 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
       })
       .sort((a, b) => {
         if (sortOrder === 'NAME') return a.name.localeCompare(b.name);
+        if (sortOrder === 'LEVEL') {
+           const lvA = getLevelNumber(a.secretProfile?.levelOrExp || a.levelOrExp);
+           const lvB = getLevelNumber(b.secretProfile?.levelOrExp || b.levelOrExp);
+           return lvB - lvA; // High to Low
+        }
         return b.updatedAt - a.updatedAt;
       });
   }, [characters, searchTerm, typeFilter, sortOrder]);
@@ -181,10 +176,10 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
            {/* Global Reveal Toggle */}
            <button 
             onClick={onToggleGlobalReveal}
-            className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-all shadow-lg border ${isGlobalReveal ? 'bg-amber-900/80 text-amber-200 border-amber-600 shadow-amber-900/50' : `${theme.classes.buttonSecondary} border-transparent bg-black/20`}`}
+            className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-all shadow-lg border ${isGlobalReveal ? `bg-current/10 border-current ${theme.classes.textAccent}` : `${theme.classes.buttonSecondary} border-transparent bg-black/20`}`}
             title="모든 캐릭터의 진상(비밀)을 봅니다"
           >
-            {isGlobalReveal ? <Icons.Lock size={18} className="text-amber-400" /> : <Icons.Lock size={18} />}
+            {isGlobalReveal ? <Icons.Lock size={18} className="animate-pulse" /> : <Icons.Lock size={18} />}
             <span className="hidden md:inline">{isGlobalReveal ? '진상 모드 ON' : '진상 일괄 전환'}</span>
           </button>
 
@@ -239,17 +234,47 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
            <div className={`h-4 w-px mx-1 opacity-30 ${theme.classes.textSub} bg-current`} />
 
-           <button 
-             onClick={() => setSortOrder(sortOrder === 'NAME' ? 'RECENT' : 'NAME')}
-             className={`text-xs font-medium flex items-center gap-1 transition-colors ${theme.classes.buttonSecondary}`}
+           <select 
+             value={sortOrder} 
+             onChange={(e) => setSortOrder(e.target.value as any)}
+             className={`bg-transparent border-none text-sm rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-opacity-50 ${theme.classes.textMain}`}
            >
-             <Icons.Refresh size={14} />
-             {sortOrder === 'NAME' ? '이름순' : '최신순'}
-           </button>
+             <option value="RECENT" className="bg-slate-800 text-slate-200">최신순</option>
+             <option value="NAME" className="bg-slate-800 text-slate-200">이름순</option>
+             <option value="LEVEL" className="bg-slate-800 text-slate-200">레벨순 (고레벨↑)</option>
+           </select>
+
+           <div className={`h-4 w-px mx-1 opacity-30 ${theme.classes.textSub} bg-current`} />
+
+           <div className="flex bg-black/30 rounded-lg p-0.5 border border-white/10">
+              <button 
+                onClick={() => setViewMode('GRID')}
+                className={`p-1.5 rounded transition-all ${viewMode === 'GRID' ? 'bg-stone-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
+                title="그리드 뷰"
+              >
+                <div className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5">
+                   <div className="bg-current rounded-[1px]"/>
+                   <div className="bg-current rounded-[1px]"/>
+                   <div className="bg-current rounded-[1px]"/>
+                   <div className="bg-current rounded-[1px]"/>
+                </div>
+              </button>
+              <button 
+                onClick={() => setViewMode('LIST')}
+                className={`p-1.5 rounded transition-all ${viewMode === 'LIST' ? 'bg-stone-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
+                title="리스트 뷰"
+              >
+                <div className="flex flex-col gap-0.5 w-3.5 h-3.5 justify-center">
+                   <div className="bg-current h-0.5 w-full rounded-[1px]"/>
+                   <div className="bg-current h-0.5 w-full rounded-[1px]"/>
+                   <div className="bg-current h-0.5 w-full rounded-[1px]"/>
+                </div>
+              </button>
+           </div>
         </div>
       </div>
 
-      {/* Character Grid */}
+      {/* Character Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 relative z-10 custom-scrollbar">
         {filteredChars.length === 0 ? (
           <div className={`h-full flex flex-col items-center justify-center opacity-60 ${theme.classes.textSub}`}>
@@ -257,19 +282,16 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
             <p>등록된 캐릭터가 없습니다.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+          <div className={`${viewMode === 'GRID' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4' : 'flex flex-col gap-2'}`}>
             {filteredChars.map((char) => {
-               // Determine Reveal State
+               // Resolve Logic (Same as before)
                const isRevealed = isGlobalReveal || revealedCharacterIds.has(char.id);
-               // Name Reveal State (Blur)
                const isNameRevealed = nameRevealedIds.has(char.id);
 
-               // Resolve Display Values based on Reveal State
                let nameToDisplay = char.name;
                let subName: string | null = null;
 
                if (isRevealed) {
-                  // Secret Mode Logic
                   if (char.secretProfile?.alias) {
                      nameToDisplay = char.secretProfile.alias;
                      subName = char.secretProfile.name || char.alias || char.name;
@@ -281,7 +303,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                      subName = char.alias ? char.name : null;
                   }
                } else {
-                  // Public Mode Logic
                   nameToDisplay = char.alias || char.name;
                   subName = char.alias ? char.name : null;
                }
@@ -289,14 +310,10 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                const summaryToDisplay = isRevealed ? (char.secretProfile?.summary || char.summary) : char.summary;
                const levelToDisplay = isRevealed ? (char.secretProfile?.levelOrExp || char.levelOrExp) : char.levelOrExp;
 
-               // Tag Logic
                const displayTags = (() => {
                   const publicAffs = char.affiliations || [];
                   const secretAffs = char.secretProfile?.affiliations || [];
-
                   if (!isRevealed) return publicAffs;
-
-                  // Merge logic for Revealed Mode
                   const secretMap = new Map(secretAffs.map(a => [a.name, a]));
                   const merged = [...secretAffs];
                   publicAffs.forEach(pa => {
@@ -305,25 +322,103 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                   return merged.filter(a => !a.isHidden);
                })();
 
-               // Visual Power Tier (Enhanced)
                const powerVisuals = getPowerVisuals(campaign.system, levelToDisplay, theme.classes.textAccent);
-
-               // Image Logic
                const activePortrait = char.extraFiles.find(f => f.useAsPortrait && f.imageUrl && (!f.isSecret || isRevealed));
                let displayImg = activePortrait ? activePortrait.imageUrl : char.imageUrl;
                if (isRevealed && char.secretProfile?.image_url) displayImg = char.secretProfile.image_url;
                
-               // Badge Style
                let badgeStyle = GUEST_COLOR;
-               if (char.playerName) {
-                 if (MEMBER_COLORS[char.playerName]) badgeStyle = MEMBER_COLORS[char.playerName];
-               }
+               if (char.playerName && MEMBER_COLORS[char.playerName]) badgeStyle = MEMBER_COLORS[char.playerName];
+
+               // Theme-based Styles for Revealed State
+               // If revealed, we apply the theme accent color to border and text.
+               // We use 'border-current' and 'text-[color]' classes to dynamically apply the color.
+               const cardContainerClass = isRevealed 
+                  ? `border-current ${theme.classes.textAccent} bg-current/5 shadow-[0_0_15px_rgba(0,0,0,0.2)]` 
+                  : `${theme.classes.border} ${theme.classes.bgPanel}`;
                
+               const cardTextClass = isRevealed
+                  ? 'text-current font-bold'
+                  : theme.classes.textMain;
+
+               const cardSubTextClass = isRevealed
+                  ? 'text-current opacity-70'
+                  : theme.classes.textSub;
+
+               // --- RENDER ITEM ---
+               if (viewMode === 'LIST') {
+                 return (
+                   <div 
+                     key={char.id}
+                     onClick={() => onSelectCharacter(char.id)}
+                     className={`group cursor-pointer rounded-lg overflow-hidden border transition-all duration-300 flex items-center p-2 gap-4 relative hover:pl-3 ${cardContainerClass} ${activePortrait && !isRevealed ? 'border-yellow-500/50' : ''}`}
+                   >
+                      {/* Portrait (Small) */}
+                      <div className="w-12 h-12 md:w-14 md:h-14 rounded-full overflow-hidden shrink-0 border border-white/10 bg-black/20 relative">
+                        {displayImg ? (
+                          <img src={displayImg} alt={nameToDisplay} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className={`w-full h-full flex items-center justify-center ${cardSubTextClass}`}><Icons.User size={20} /></div>
+                        )}
+                        {/* NPC Badge Small */}
+                        <div className={`absolute bottom-0 inset-x-0 h-3 ${char.isNpc ? 'bg-amber-600' : 'bg-emerald-600'} opacity-80`} />
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-center gap-1 md:gap-4">
+                        <div className="flex-1 min-w-0">
+                           <div className="flex items-center gap-2">
+                              <span className={`truncate text-sm md:text-base ${cardTextClass}`}>
+                                {nameToDisplay}
+                              </span>
+                              {subName && (
+                                <span className={`text-[10px] md:text-xs truncate opacity-50 ${char.isNameBlurred && !isRevealed && !isNameRevealed ? 'blur-[2px]' : ''}`}>
+                                  {subName}
+                                </span>
+                              )}
+                              {isRevealed && <Icons.Lock size={12} className="opacity-70" />}
+                           </div>
+                           <p className={`text-[11px] md:text-xs truncate opacity-60 hidden md:block ${cardSubTextClass}`}>
+                             {summaryToDisplay}
+                           </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 shrink-0">
+                           {/* Level */}
+                           {levelToDisplay && (
+                              <span className="text-[10px] font-mono font-bold opacity-70 bg-black/20 px-2 py-1 rounded">
+                                 {levelToDisplay}
+                              </span>
+                           )}
+
+                           {/* Player Badge */}
+                           {char.playerName && !isRevealed && (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border truncate ${badgeStyle}`}>
+                                 {char.playerName}
+                              </span>
+                           )}
+                           
+                           {/* Tags in List (Only Show First 2) */}
+                           <div className="hidden lg:flex gap-1">
+                              {displayTags.slice(0, 2).map(tag => (
+                                 <span key={tag.id} className="text-[9px] px-1.5 py-0.5 bg-black/20 rounded border border-white/10 opacity-60">
+                                    {tag.name}
+                                 </span>
+                              ))}
+                              {displayTags.length > 2 && <span className="text-[9px] opacity-40">+{displayTags.length - 2}</span>}
+                           </div>
+                        </div>
+                      </div>
+                   </div>
+                 );
+               }
+
+               // --- GRID VIEW (Existing) ---
                return (
                 <div 
                   key={char.id}
                   onClick={() => onSelectCharacter(char.id)}
-                  className={`group cursor-pointer rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col border ${theme.classes.bgPanel} ${activePortrait ? 'border-yellow-500' : isRevealed ? 'border-amber-700 shadow-amber-900/30' : theme.classes.border}`}
+                  className={`group cursor-pointer rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col border ${cardContainerClass} ${activePortrait && !isRevealed ? 'border-yellow-500' : ''}`}
                 >
                   {/* Image Container */}
                   <div className="aspect-square bg-black/20 relative overflow-hidden">
@@ -339,23 +434,20 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                       </div>
                     )}
                     
-                    {/* PC/NPC Tag - Top Left */}
                     <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
                       <span className={`px-2 py-0.5 text-[10px] font-bold rounded shadow-sm ${char.isNpc ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}>
                         {char.isNpc ? 'NPC' : 'PC'}
                       </span>
                     </div>
 
-                    {/* Reveal Indicator (Icon) */}
                     {isRevealed && (
                        <div className="absolute top-2 right-2 z-10">
-                         <div className="bg-amber-900/80 text-amber-200 rounded-full p-1 border border-amber-500 shadow-lg">
+                         <div className={`rounded-full p-1 border shadow-lg ${theme.classes.textAccent} border-current bg-black/50`}>
                            <Icons.Lock size={12} />
                          </div>
                        </div>
                     )}
 
-                    {/* Player Name Badge */}
                     {char.playerName && !isRevealed && (
                        <div className="absolute top-2 right-2 z-10 max-w-[70%]">
                           <span className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border truncate ${badgeStyle}`}>
@@ -365,7 +457,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                        </div>
                     )}
 
-                    {/* Secret File Indicator */}
                     {char.extraFiles.length > 0 && (
                        <div className="absolute bottom-2 right-2">
                          <Icons.Folder size={16} className={`drop-shadow-md ${activePortrait ? 'text-yellow-400' : theme.classes.textSub}`} fill="currentColor" />
@@ -374,14 +465,14 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                   </div>
 
                   {/* Info */}
-                  <div className={`p-3 flex flex-col relative flex-1 ${isRevealed ? 'bg-amber-950/10' : ''}`}>
+                  <div className="p-3 flex flex-col relative flex-1">
                      <div className="flex justify-between items-start mb-1">
                        <div className="flex-1 min-w-0">
-                         <h3 className={`font-bold truncate transition-colors group-hover:opacity-80 text-sm md:text-base ${isRevealed ? 'text-amber-400' : theme.classes.textMain}`}>
+                         <h3 className={`truncate transition-colors group-hover:opacity-80 text-sm md:text-base ${cardTextClass}`}>
                            {nameToDisplay}
                          </h3>
                          {subName && (
-                           <div className={`text-[10px] truncate ${theme.classes.textSub} ${char.isNameBlurred && !isRevealed && !isNameRevealed ? 'blur-[2px] select-none hover:blur-none transition-all' : ''}`}>
+                           <div className={`text-[10px] truncate ${cardSubTextClass} ${char.isNameBlurred && !isRevealed && !isNameRevealed ? 'blur-[2px] select-none hover:blur-none transition-all' : ''}`}>
                              {subName}
                            </div>
                          )}
@@ -389,11 +480,10 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                      </div>
                      
                      <div className="flex items-center justify-between mb-2">
-                       <p className={`text-xs truncate font-medium ${theme.classes.textSub}`}>
-                         {/* Removed Role/Class Text as requested */}
+                       <p className={`text-xs truncate font-medium ${cardSubTextClass}`}>
+                          {/* Empty spacer or custom class if needed */}
                        </p>
                        
-                       {/* Visual Power Tier Gauge (2-Level Steps) */}
                        {powerVisuals && (
                          <div className={`flex gap-0.5 items-center ${powerVisuals.effectClass}`} title="Power Level">
                             {[1, 2, 3, 4, 5].map(step => (
@@ -406,26 +496,29 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                        )}
                      </div>
 
-                     {/* Character Quote / Summary */}
                      {summaryToDisplay && (
                         <div className="mt-auto pt-2 border-t border-dashed border-white/10">
-                          <p className={`text-[11px] italic line-clamp-2 leading-tight opacity-70 ${isRevealed ? 'text-amber-200' : theme.classes.textMain}`}>
+                          <p className={`text-[11px] italic line-clamp-2 leading-tight opacity-70 ${cardSubTextClass}`}>
                             "{summaryToDisplay}"
                           </p>
                         </div>
                      )}
 
-                     {/* Tags List (Toggleable) */}
                      {showTags && displayTags.length > 0 && (
                         <div className="mt-2 pt-2 border-t border-dashed border-white/10 flex flex-wrap gap-1.5">
                            {displayTags.map(tag => {
                               const isPublicRef = (char.affiliations || []).some(pa => pa.name === tag.name);
                               const isSecretStyle = !isPublicRef && isRevealed;
                               
+                              // Dynamic Tag Style for Revealed
+                              const tagClass = isSecretStyle 
+                                 ? `border-current ${theme.classes.textAccent} bg-current/10 opacity-80`
+                                 : `bg-black/20 ${theme.classes.textSub} ${theme.classes.border}`;
+
                               return (
                                  <span 
                                     key={tag.id} 
-                                    className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${tag.isStrikethrough ? 'line-through opacity-50' : ''} ${isSecretStyle ? 'bg-amber-900/40 text-amber-100 border-amber-600/50' : `bg-black/20 ${theme.classes.textSub} ${theme.classes.border}`}`}
+                                    className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${tag.isStrikethrough ? 'line-through opacity-50' : ''} ${tagClass}`}
                                  >
                                     {tag.name}
                                     {tag.rank && <span className="opacity-60 ml-1">| {tag.rank}</span>}

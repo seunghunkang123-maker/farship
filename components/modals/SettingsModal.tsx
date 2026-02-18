@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Campaign, SystemType } from '../../types';
 import { Icons } from '../ui/Icons';
-import { fileToBase64 } from '../../services/storage';
+import { uploadImage } from '../../services/upload';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -162,8 +162,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                              <Icons.Upload className="text-amber-400" />
                              <input type="file" className="hidden" onChange={async (e) => {
                                 if(e.target.files?.[0]) {
-                                  const url = await fileToBase64(e.target.files[0]);
-                                  onUpdateCampaign({...selectedCampaign, logoUrl: url});
+                                  try {
+                                    const url = await uploadImage(e.target.files[0]);
+                                    onUpdateCampaign({...selectedCampaign, logoUrl: url});
+                                  } catch (err: any) {
+                                    alert(err.message);
+                                  }
                                 }
                              }} />
                            </label>

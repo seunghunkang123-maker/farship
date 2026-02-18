@@ -199,8 +199,6 @@ create policy "Public Access Comments" on character_comments for all using (true
 NOTIFY pgrst, 'reload config';
 `;
 
-// 사용자가 제공한 데이터를 복원하는 SQL
-// 이미지가 포함된 경우 쿼리가 너무 길어질 수 있으므로 이미지는 제외하고 텍스트 데이터 위주로 복원합니다.
 const RESTORE_DATA_SQL = `
 -- 1. 캠페인 데이터 복원
 INSERT INTO campaigns (id, name, sub_title, system, theme, alias_label) VALUES
@@ -248,13 +246,12 @@ INSERT INTO characters (id, campaign_id, name, player_name, is_npc, summary, des
 -- Raven (Ravenloft)
 ('cf82999e-7360-449e-b9b9-d2932970af4b', 'ea0c3eb2-8bad-46f1-9318-7c039175a19a', '레이븐 (Raven)', '배추', false, '', NULL, 'Ranger', NULL, NULL, 'Lv. 10', '32세', '남성', '180 cm', '77 kg', NULL, '레이븐 (Raven)', true, '[{"id": "a6e66d33-6b3b-44f5-9025-648209615863", "name": "안개 속 모험가", "isHidden": false, "isStrikethrough": false}]', '{"age": "", "name": "Raven", "alias": "", "gender": "짐승", "height": "230 cm", "weight": "95 kg"}', 1771256421698),
 -- Estella (Ravenloft)
-('e1fb36b3-467c-4196-8caf-040f19663ac6', 'ea0c3eb2-8bad-46f1-9318-7c039175a19a', '에스텔라 루미에르', '승훈', false, '사랑과 정의의 이름으로!', '보라, 이 이야기는 안개 속을 헤매는...', 'Warlock', NULL, NULL, 'LV.10', '??세', '여성', '165cm', '비밀이에요~★', '1. 의복의 청결성에 대해 언급하지 마십시오...', 'THE STAR', false, '[{"id": "8bb3cd20-3ea9-4e61-adc2-25d488667cf3", "name": "마법소녀", "isHidden": false, "isStrikethrough": false}]', '{"age": "17세", "name": "김민지", "alias": "THE STAR", "gender": "여성", "height": "163cm", "weight": "53kg", "summary": "\\\"내...내가 대체 뭘 그리 잘못했다고 그래요...\\\"", "comments": [], "realName": ""}', 1771419350624)
+('e1fb36b3-467c-4196-8caf-040f19663ac6', 'ea0c3eb2-8bad-46f1-9318-7c039175a19a', '에스텔라 루미에르', '승훈', false, '사랑과 정의의 이름으로!', '보라, 이 이야기는 안개 속을 헤매는...', 'Warlock', NULL, NULL, 'LV.10', '??세', '여성', '165cm', '비밀이에요~★', '1. 의복의 청결성에 대해 언급하지 마십시오...', 'THE STAR', false, '[{"id": "8bb3cd20-3ea9-4e61-adc2-25d488667cf3", "name": "마법사", "isHidden": false, "isStrikethrough": false}]', '{"age": "17세", "name": "김민지", "alias": "THE STAR", "gender": "여성", "height": "163cm", "weight": "53kg", "summary": "\\\"내...내가 대체 뭘 그리 잘못했다고 그래요...\\\"", "comments": [], "realName": ""}', 1771419350624)
 ON CONFLICT (id) DO UPDATE SET
   campaign_id = EXCLUDED.campaign_id, name = EXCLUDED.name, player_name = EXCLUDED.player_name, summary = EXCLUDED.summary, secret_profile = EXCLUDED.secret_profile;
 
 -- 3. 추가 파일(아이템 등)
 INSERT INTO extra_files (id, character_id, title, content, file_type) VALUES
-('6dffcadb-b7d1-442f-847e-012ed71b976a', '4932f720-3081-4fed-a436-21ae7c4f84d3', '블러드 서커', '렌이 항상 차고 다니는 레이피어.\n본인이 주장하기론...', 'REGULAR'),
 ('7277c589-7d7f-4206-ae58-10422a84fe40', '6592ba98-a3d1-47d5-9e27-1ccf7aaea70d', '프로필 요약', '컬트 오브 드래곤에서 생체 병기로 길러진...', 'REGULAR')
 ON CONFLICT (id) DO NOTHING;
 
@@ -265,13 +262,41 @@ INSERT INTO character_comments (id, character_id, user_name, content, style_vari
 ON CONFLICT (id) DO NOTHING;
 `;
 
+const STORAGE_SQL = `
+-- Supabase Storage 버킷 생성 및 정책 설정
+-- 이 SQL은 이미지를 저장할 'images' 버킷을 만들고, 누구나 보고 업로드할 수 있게 설정합니다.
+
+-- 1. 'images' 버킷 생성 (이미 존재하면 무시)
+insert into storage.buckets (id, name, public)
+values ('images', 'images', true)
+on conflict (id) do nothing;
+
+-- 2. 기존 정책 정리 (중복 방지)
+drop policy if exists "Public Access" on storage.objects;
+drop policy if exists "Public Upload" on storage.objects;
+drop policy if exists "Public Update" on storage.objects;
+
+-- 3. 정책 생성
+-- 3-1. 누구나 조회 가능 (SELECT)
+create policy "Public Access" on storage.objects for select using ( bucket_id = 'images' );
+
+-- 3-2. 누구나 업로드 가능 (INSERT)
+create policy "Public Upload" on storage.objects for insert with check ( bucket_id = 'images' );
+
+-- 3-3. 누구나 수정 가능 (UPDATE)
+create policy "Public Update" on storage.objects for update using ( bucket_id = 'images' );
+
+-- 설정 완료 확인 메시지
+NOTIFY pgrst, 'reload config';
+`;
+
 interface Props {
   onRetry: () => void;
   errorMsg?: string;
 }
 
 const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
-  const [activeTab, setActiveTab] = useState<'INITIAL' | 'UPDATE' | 'RESTORE'>('UPDATE');
+  const [activeTab, setActiveTab] = useState<'INITIAL' | 'UPDATE' | 'RESTORE' | 'STORAGE'>('STORAGE');
 
   const copySql = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -293,24 +318,30 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
           </div>
         )}
 
-        <div className="flex gap-2 mb-6 border-b border-slate-700 pb-1">
+        <div className="flex gap-2 mb-6 border-b border-slate-700 pb-1 overflow-x-auto">
            <button 
              onClick={() => setActiveTab('INITIAL')}
-             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors ${activeTab === 'INITIAL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'INITIAL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
            >
              1. 초기화 (New)
            </button>
            <button 
              onClick={() => setActiveTab('UPDATE')}
-             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors ${activeTab === 'UPDATE' ? 'bg-amber-700 text-white' : 'text-slate-400 hover:text-white'}`}
+             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'UPDATE' ? 'bg-amber-700 text-white' : 'text-slate-400 hover:text-white'}`}
            >
              2. 업데이트 (Fix)
            </button>
            <button 
              onClick={() => setActiveTab('RESTORE')}
-             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors ${activeTab === 'RESTORE' ? 'bg-emerald-700 text-white' : 'text-slate-400 hover:text-white'}`}
+             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'RESTORE' ? 'bg-emerald-700 text-white' : 'text-slate-400 hover:text-white'}`}
            >
              3. 데이터 복원 (Restore)
+           </button>
+           <button 
+             onClick={() => setActiveTab('STORAGE')}
+             className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'STORAGE' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+           >
+             4. 스토리지 설정 (Storage)
            </button>
         </div>
 
@@ -360,6 +391,24 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
               </p>
               <pre className="text-xs text-slate-400 overflow-auto max-h-64 custom-scrollbar p-2 bg-black/30 rounded">
                 {RESTORE_DATA_SQL}
+              </pre>
+            </div>
+          )}
+
+          {activeTab === 'STORAGE' && (
+            <div className="bg-slate-900 p-4 rounded-lg border border-blue-900 ring-2 ring-blue-500/50 animate-in fade-in">
+               <h3 className="text-blue-400 font-bold mb-2 flex justify-between items-center">
+                <span>Supabase Storage 버킷 생성</span>
+                <button onClick={() => copySql(STORAGE_SQL)} className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded transition-colors">
+                  복사하기
+                </button>
+              </h3>
+              <p className="text-xs text-slate-400 mb-2 font-bold text-blue-200">
+                이미지 저장을 위한 'images' 버킷을 생성하고 공개 접근 권한을 설정합니다.<br/>
+                (실행 후 Supabase 대시보드의 Storage 메뉴에서 버킷이 생성되었는지 확인하세요)
+              </p>
+              <pre className="text-xs text-slate-400 overflow-auto max-h-64 custom-scrollbar p-2 bg-black/30 rounded">
+                {STORAGE_SQL}
               </pre>
             </div>
           )}
