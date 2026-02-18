@@ -292,6 +292,51 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
     alert('SQL이 클립보드에 복사되었습니다. Supabase SQL Editor에서 실행해주세요.');
   };
 
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>, setJson: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === 'string') {
+        setJson(event.target.result);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset input
+  };
+
+  // Helper to parse potential different JSON structures
+  const parseJSON = (jsonString: string, label: string) => {
+    try {
+      if (!jsonString.trim()) return [];
+      const data = JSON.parse(jsonString);
+      if (Array.isArray(data)) return data;
+      // Handle cases where export might be { rows: [...] } or similar
+      if (data && Array.isArray(data.rows)) return data.rows;
+      if (data && typeof data === 'object') return [data]; // Single object
+      return [];
+    } catch (e) {
+      throw new Error(`[${label}] JSON 파싱 실패: 형식이 올바르지 않습니다.`);
+    }
+  };
+
+  // Batch upsert function to avoid "Failed to fetch" (Payload too large)
+  const upsertBatched = async (table: string, data: any[], batchSize = 50, onProgress: (msg: string) => void) => {
+    if (!data || data.length === 0) return;
+    
+    const total = data.length;
+    for (let i = 0; i < total; i += batchSize) {
+      const batch = data.slice(i, i + batchSize);
+      onProgress(`${table} 저장 중... (${Math.min(i + batchSize, total)}/${total})`);
+      
+      const { error } = await supabase.from(table).upsert(batch);
+      if (error) {
+         console.error(`Error importing ${table} batch ${i}:`, error);
+         throw new Error(`[${table}] 저장 실패: ${error.message} (Row ${i+1}~${i+batch.length})`);
+      }
+    }
+  };
+
   const handleImport = async () => {
     if (!confirm("이 작업은 현재 DB에 데이터를 덮어쓰거나 추가합니다. 진행하시겠습니까?")) return;
     
@@ -299,45 +344,54 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
     setImportStatus('데이터 분석 시작...');
 
     try {
-      // 1. Settings (단일 행)
+      // 1. Settings (단일 행 처리가 안전)
       if (jsonSettings.trim()) {
-        const settings = JSON.parse(jsonSettings);
-        // id를 제외하고 update 하거나 insert
+        const settings = parseJSON(jsonSettings, 'Settings');
         if (settings.length > 0) {
-           const { id, ...rest } = settings[0];
-           await supabase.from('settings').upsert(rest); // id 없이 insert하면 serial 증가, id 있으면 update
+           const row = settings[0];
+           const { id, ...rest } = row;
+           const { data: existing } = await supabase.from('settings').select('id').limit(1).maybeSingle();
+           
+           if (existing) {
+             const { error } = await supabase.from('settings').update(rest).eq('id', existing.id);
+             if (error) throw new Error(`Settings Update Error: ${error.message}`);
+           } else {
+             const { error } = await supabase.from('settings').insert(row);
+             if (error) throw new Error(`Settings Insert Error: ${error.message}`);
+           }
         }
       }
 
-      // 2. Campaigns (부모)
+      // 2. Campaigns (Batch size 10 - 캠페인에도 로고 이미지가 있을 수 있음)
       if (jsonCampaigns.trim()) {
-        const campaigns = JSON.parse(jsonCampaigns);
-        setImportStatus(`캠페인 ${campaigns.length}개 저장 중...`);
-        const { error } = await supabase.from('campaigns').upsert(campaigns, { onConflict: 'id' });
-        if (error) throw new Error(`Campaign Error: ${error.message}`);
+        const campaigns = parseJSON(jsonCampaigns, 'Campaigns');
+        if (campaigns.length > 0) {
+           await upsertBatched('campaigns', campaigns, 10, setImportStatus);
+        }
       }
 
-      // 3. Characters (자식)
+      // 3. Characters (Batch size 20)
       if (jsonCharacters.trim()) {
-        const chars = JSON.parse(jsonCharacters);
-        setImportStatus(`캐릭터 ${chars.length}명 저장 중...`);
-        const { error } = await supabase.from('characters').upsert(chars, { onConflict: 'id' });
-        if (error) throw new Error(`Character Error: ${error.message}`);
+        const characters = parseJSON(jsonCharacters, 'Characters');
+        if (characters.length > 0) {
+           await upsertBatched('characters', characters, 20, setImportStatus);
+        }
       }
 
-      // 4. Files & Comments (손자)
+      // 4. Files (Batch size 5 - 이미지가 포함되어 있어 매우 무거울 수 있음)
       if (jsonFiles.trim()) {
-        const files = JSON.parse(jsonFiles);
-        setImportStatus(`파일 ${files.length}개 저장 중...`);
-        const { error } = await supabase.from('extra_files').upsert(files, { onConflict: 'id' });
-        if (error) throw new Error(`File Error: ${error.message}`);
+        const files = parseJSON(jsonFiles, 'Files');
+        if (files.length > 0) {
+           await upsertBatched('extra_files', files, 5, setImportStatus);
+        }
       }
 
+      // 5. Comments (Batch size 50)
       if (jsonComments.trim()) {
-        const comments = JSON.parse(jsonComments);
-        setImportStatus(`댓글 ${comments.length}개 저장 중...`);
-        const { error } = await supabase.from('character_comments').upsert(comments, { onConflict: 'id' });
-        if (error) throw new Error(`Comment Error: ${error.message}`);
+        const comments = parseJSON(jsonComments, 'Comments');
+        if (comments.length > 0) {
+           await upsertBatched('character_comments', comments, 50, setImportStatus);
+        }
       }
 
       setImportStatus('✅ 모든 데이터 복원 완료! 3초 후 재시작합니다.');
@@ -346,7 +400,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
     } catch (e: any) {
       console.error(e);
       setImportStatus(`❌ 오류 발생: ${e.message}`);
-      alert(`JSON 형식이 잘못되었거나 데이터베이스 제약 조건에 위배됩니다.\n(예: 캠페인을 먼저 넣지 않고 캐릭터를 넣음)\n\n${e.message}`);
+      alert(`복원 중 오류가 발생했습니다.\n데이터 양이 많을 수 있으니 잠시 기다렸다 다시 시도해보세요.\n\n${e.message}`);
     } finally {
       setIsImporting(false);
     }
@@ -362,7 +416,7 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
             <Icons.Settings size={32} />
             <h1 className="text-2xl font-bold text-white">데이터베이스 설정 & 마이그레이션</h1>
           </div>
-          <div className="flex bg-slate-900 p-1 rounded-lg">
+          <div className="flex bg-slate-900 p-1 rounded-lg shrink-0">
              <button onClick={() => setActiveTab('SQL')} className={`px-4 py-2 rounded font-bold text-sm transition-colors ${activeTab === 'SQL' ? 'bg-amber-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>1. SQL 설정</button>
              <button onClick={() => setActiveTab('IMPORT')} className={`px-4 py-2 rounded font-bold text-sm transition-colors ${activeTab === 'IMPORT' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>2. 데이터 복원</button>
           </div>
@@ -401,12 +455,19 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
              <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg text-sm text-blue-200 mb-4">
                 <strong>💡 사용법:</strong> 기존 Supabase 대시보드(Table Editor)에서 각 테이블을 
                 <span className="font-bold text-white mx-1">Export as JSON</span>으로 다운로드한 뒤, 
-                아래 해당 칸에 내용을 그대로 붙여넣으세요.
+                아래 해당 칸에 내용을 그대로 붙여넣거나 파일을 업로드하세요.
              </div>
 
              <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                   <label className="block text-xs font-bold text-slate-400 mb-1">1. Campaigns (campaigns_rows.json)</label>
+                   <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-400">1. Campaigns (campaigns_rows.json)</label>
+                      <label className="cursor-pointer flex items-center gap-1 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2 py-1 rounded border border-stone-600 transition-colors">
+                         <Icons.Upload size={12} />
+                         <span className="text-[10px] font-bold">파일 선택</span>
+                         <input type="file" accept=".json" className="hidden" onChange={(e) => handleFileRead(e, setJsonCampaigns)} />
+                      </label>
+                   </div>
                    <textarea 
                      value={jsonCampaigns} onChange={e => setJsonCampaigns(e.target.value)} 
                      className="w-full h-24 bg-slate-900 border border-slate-700 rounded p-2 text-[10px] font-mono focus:border-blue-500 outline-none" 
@@ -414,7 +475,14 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
                    />
                 </div>
                 <div>
-                   <label className="block text-xs font-bold text-slate-400 mb-1">2. Characters (characters_rows.json)</label>
+                   <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-400">2. Characters (characters_rows.json)</label>
+                      <label className="cursor-pointer flex items-center gap-1 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2 py-1 rounded border border-stone-600 transition-colors">
+                         <Icons.Upload size={12} />
+                         <span className="text-[10px] font-bold">파일 선택</span>
+                         <input type="file" accept=".json" className="hidden" onChange={(e) => handleFileRead(e, setJsonCharacters)} />
+                      </label>
+                   </div>
                    <textarea 
                      value={jsonCharacters} onChange={e => setJsonCharacters(e.target.value)} 
                      className="w-full h-24 bg-slate-900 border border-slate-700 rounded p-2 text-[10px] font-mono focus:border-blue-500 outline-none" 
@@ -422,21 +490,42 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
                    />
                 </div>
                 <div>
-                   <label className="block text-xs font-bold text-slate-400 mb-1">3. Extra Files (extra_files_rows.json)</label>
+                   <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-400">3. Extra Files (extra_files_rows.json)</label>
+                      <label className="cursor-pointer flex items-center gap-1 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2 py-1 rounded border border-stone-600 transition-colors">
+                         <Icons.Upload size={12} />
+                         <span className="text-[10px] font-bold">파일 선택</span>
+                         <input type="file" accept=".json" className="hidden" onChange={(e) => handleFileRead(e, setJsonFiles)} />
+                      </label>
+                   </div>
                    <textarea 
                      value={jsonFiles} onChange={e => setJsonFiles(e.target.value)} 
                      className="w-full h-24 bg-slate-900 border border-slate-700 rounded p-2 text-[10px] font-mono focus:border-blue-500 outline-none" 
                    />
                 </div>
                 <div>
-                   <label className="block text-xs font-bold text-slate-400 mb-1">4. Comments (character_comments_rows.json)</label>
+                   <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-400">4. Comments (character_comments_rows.json)</label>
+                      <label className="cursor-pointer flex items-center gap-1 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2 py-1 rounded border border-stone-600 transition-colors">
+                         <Icons.Upload size={12} />
+                         <span className="text-[10px] font-bold">파일 선택</span>
+                         <input type="file" accept=".json" className="hidden" onChange={(e) => handleFileRead(e, setJsonComments)} />
+                      </label>
+                   </div>
                    <textarea 
                      value={jsonComments} onChange={e => setJsonComments(e.target.value)} 
                      className="w-full h-24 bg-slate-900 border border-slate-700 rounded p-2 text-[10px] font-mono focus:border-blue-500 outline-none" 
                    />
                 </div>
                 <div className="md:col-span-2">
-                   <label className="block text-xs font-bold text-slate-400 mb-1">5. Settings (settings_rows.json) - 선택사항</label>
+                   <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-400">5. Settings (settings_rows.json) - 선택사항</label>
+                      <label className="cursor-pointer flex items-center gap-1 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2 py-1 rounded border border-stone-600 transition-colors">
+                         <Icons.Upload size={12} />
+                         <span className="text-[10px] font-bold">파일 선택</span>
+                         <input type="file" accept=".json" className="hidden" onChange={(e) => handleFileRead(e, setJsonSettings)} />
+                      </label>
+                   </div>
                    <textarea 
                      value={jsonSettings} onChange={e => setJsonSettings(e.target.value)} 
                      className="w-full h-16 bg-slate-900 border border-slate-700 rounded p-2 text-[10px] font-mono focus:border-blue-500 outline-none" 
