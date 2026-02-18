@@ -160,7 +160,8 @@ export const loadFullState = async (): Promise<AppState> => {
   let settingsData: any = null;
   try {
     const { data, error } = await supabase.from('settings').select('*').maybeSingle();
-    if (error && error.code !== 'PGRST116') console.warn('Settings Load Warning:', error);
+    // If table missing (42P01), we treat it as empty default
+    if (error && error.code !== 'PGRST116' && error.code !== '42P01') console.warn('Settings Load Warning:', error);
     settingsData = data;
   } catch (e) {
     console.warn('Settings table access failed, using defaults.', e);
@@ -169,7 +170,11 @@ export const loadFullState = async (): Promise<AppState> => {
   // Load Campaigns
   // Campaigns are metadata, usually light, so we can fetch them directly.
   const { data: campaignsData, error: campError } = await supabase.from('campaigns').select('*');
-  if (campError) throw new Error(`Campaign Load Failed: ${campError.message}`);
+  if (campError) {
+     // If table missing, throw original error so App.tsx can show setup screen
+     if (campError.code === '42P01') throw campError;
+     throw new Error(`Campaign Load Failed: ${campError.message}`);
+  }
 
   // Load Heavy Data (Characters & Files) using Retry-enabled Batched Fetching
   let charData: DbCharacter[] = [];
@@ -177,6 +182,8 @@ export const loadFullState = async (): Promise<AppState> => {
     // Keep batch size small (6) to balance request count vs payload size (Base64 images)
     charData = await fetchBatched<DbCharacter>('characters', 6); 
   } catch (e: any) {
+    // If table missing, throw original error so App.tsx can show setup screen
+    if (e.code === '42P01' || e.message?.includes('does not exist')) throw e;
     throw new Error(`Character Load Failed: ${e.message}`);
   }
 
@@ -185,13 +192,17 @@ export const loadFullState = async (): Promise<AppState> => {
     // Files are the heaviest. Keep batch size very conservative (5)
     fileData = await fetchBatched<DbExtraFile>('extra_files', 5); 
   } catch (e: any) {
+    if (e.code === '42P01' || e.message?.includes('does not exist')) throw e;
     throw new Error(`File Load Failed: ${e.message}`);
   }
 
   // Load Comments (Text only, usually safe to fetch all unless massive)
   // If comments are huge, convert to fetchBatched as well, but usually fine.
   const { data: commentData, error: commentError } = await supabase.from('character_comments').select('*');
-  if (commentError && commentError.code !== '42P01') throw new Error(`Comment Load Failed: ${commentError.message}`);
+  if (commentError && commentError.code !== '42P01') {
+      // Don't fail entire app if comments fail, just log
+      console.warn(`Comment Load Failed: ${commentError.message}`);
+  }
 
   const campaigns: Campaign[] = (campaignsData || []).map((c: DbCampaign) => ({
     id: c.id,

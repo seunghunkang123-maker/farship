@@ -57,7 +57,19 @@ const App: React.FC = () => {
       const connectionError = await checkDatabaseConnection();
       if (connectionError) {
         console.error("DB Connection Error:", connectionError);
-        if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || connectionError.message.includes('not find the table')) {
+        // PGRST205 or 42P01: Table not found
+        // 42703: Column not found
+        const errMsg = connectionError.message || "";
+        
+        // Handle Network/URL errors specifically
+        if (errMsg.includes('Failed to fetch') || errMsg.includes('error parsing URL')) {
+           setDbError("서버에 연결할 수 없습니다.\n\n[해결 방법]\n1. Vercel 배포 환경이라면, Settings > Environment Variables 메뉴에\n   'VITE_SUPABASE_URL'과 'VITE_SUPABASE_ANON_KEY'가 올바르게 설정되었는지 확인하세요.\n2. 이전된 Supabase 프로젝트가 활성화 상태인지 확인하세요.");
+           setLoading(false);
+           setIsSyncing(false);
+           return;
+        }
+
+        if (connectionError.code === 'PGRST205' || connectionError.code === '42P01' || errMsg.includes('not find the table') || errMsg.includes('relation "public.campaigns" does not exist')) {
           setDbError(connectionError.message);
           setLoading(false);
           setIsSyncing(false);
@@ -73,7 +85,17 @@ const App: React.FC = () => {
     } catch (e) {
       console.error("Load failed:", e);
       if (showLoading) {
-         setDbError("데이터를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.");
+         // Check if it is a specific DB error that requires setup
+         const errCode = (e as any)?.code;
+         const errMsg = (e as any)?.message || "";
+         
+         if (errMsg.includes('Failed to fetch') || errMsg.includes('error parsing URL')) {
+             setDbError("서버에 연결할 수 없습니다.\n\n[해결 방법]\n1. Vercel 배포 환경이라면, Settings > Environment Variables 메뉴에\n   'VITE_SUPABASE_URL'과 'VITE_SUPABASE_ANON_KEY'가 설정되어 있는지 확인하세요.\n2. .env 파일이 Git에 포함되지 않았으므로 Vercel에서 직접 설정해야 합니다.");
+         } else if (errCode === '42P01' || errMsg.includes('does not exist')) {
+             setDbError(`데이터베이스 초기화가 필요합니다.\n(${errMsg})`);
+         } else {
+             setDbError("데이터를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.\n상세 에러: " + errMsg);
+         }
       } else {
          console.warn("Background refresh failed. Keeping existing data to prevent data loss.");
       }
