@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation, CombatStat } from '../../types';
 import { Icons } from '../ui/Icons';
@@ -34,7 +33,7 @@ const COMMENT_FONTS = {
 };
 
 // --- Radar Chart Component ---
-const RadarChart: React.FC<{ stats: CombatStat[]; themeColor: string }> = ({ stats, themeColor }) => {
+const RadarChart: React.FC<{ stats: CombatStat[]; themeColor: string; hideLegend?: boolean }> = ({ stats, themeColor, hideLegend = false }) => {
   if (!stats || stats.length < 3) {
     return (
       <div className="w-full aspect-square flex items-center justify-center bg-black/20 rounded-xl border border-dashed border-stone-800">
@@ -111,14 +110,16 @@ const RadarChart: React.FC<{ stats: CombatStat[]; themeColor: string }> = ({ sta
       </svg>
       
       {/* Legend / Values */}
-      <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-1">
-        {stats.map(s => (
-          <div key={s.name} className="flex justify-between items-center text-xs w-24">
-             <span className="text-stone-500 truncate mr-2">{s.name}</span>
-             <span className="font-bold opacity-80">{s.value}</span>
-          </div>
-        ))}
-      </div>
+      {!hideLegend && (
+        <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-1">
+          {stats.map(s => (
+            <div key={s.name} className="flex justify-between items-center text-xs w-24">
+               <span className="text-stone-500 truncate mr-2">{s.name}</span>
+               <span className="font-bold opacity-80">{s.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -1005,7 +1006,43 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     )}
                     
                     {file.fileType === 'COMBAT' ? (
-                      <RadarChart stats={file.combatStats || []} themeColor={tc.textAccent} />
+                      <div className="flex flex-col items-center w-full">
+                        <RadarChart stats={file.combatStats || []} themeColor={tc.textAccent} hideLegend={isEditing} />
+                        {isEditing && (
+                           <div className="mt-6 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {(file.combatStats || []).map((stat, idx) => (
+                                 <div key={idx} className="flex items-center gap-3 bg-black/40 p-3 rounded-xl border border-stone-800">
+                                    <input 
+                                      className={`w-24 bg-transparent border-b ${tc.border} text-xs font-bold text-center focus:border-amber-500 outline-none pb-1`}
+                                      value={stat.name}
+                                      onChange={(e) => {
+                                         const newStats = [...(file.combatStats || [])];
+                                         newStats[idx] = { ...stat, name: e.target.value };
+                                         updateExtraFile(file.id, 'combatStats', newStats);
+                                      }}
+                                      placeholder="Stat Name"
+                                    />
+                                    <div className="flex-1 flex flex-col gap-1">
+                                       <input 
+                                          type="range" min="1" max="5" step="1"
+                                          value={stat.value}
+                                          onChange={(e) => {
+                                             const newStats = [...(file.combatStats || [])];
+                                             newStats[idx] = { ...stat, value: parseInt(e.target.value) };
+                                             updateExtraFile(file.id, 'combatStats', newStats);
+                                          }}
+                                          className="w-full h-1.5 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-amber-600"
+                                       />
+                                       <div className="flex justify-between text-[8px] text-stone-500 font-mono px-1">
+                                          <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                                       </div>
+                                    </div>
+                                    <span className={`text-sm font-black w-6 text-center ${tc.textAccent}`}>{stat.value}</span>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+                      </div>
                     ) : (
                       isEditing ? (
                         <textarea value={file.content} onChange={e => updateExtraFile(file.id, 'content', e.target.value)} className="w-full h-40 bg-black/40 border border-stone-800 rounded-xl p-4 text-sm focus:border-amber-500 outline-none transition-colors" placeholder="Enter detailed information..."/>
