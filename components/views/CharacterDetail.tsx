@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation, CombatStat } from '../../types';
 import { Icons } from '../ui/Icons';
@@ -410,12 +409,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     });
 
     // 2. Identify Universal Tags
-    // Strategy: Determine "Universal" based on Name only appearing in >= 2 campaigns
-    // But for import purposes, we want to allow importing specific variations.
-    // For simplicity:
-    // - "Universal": List distinct NAMEs that appear in multiple campaigns (generic import).
-    // - "Campaigns": List full details {name, rank} for specific imports.
-    
     const tagNameCounts = new Map<string, Set<string>>();
     
     Object.entries(tagsByCampaign).forEach(([campName, tagSet]) => {
@@ -529,16 +522,27 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     setFormData(prev => ({ ...prev, secretProfile: { ...(prev.secretProfile || {}), [field]: value } }));
   };
 
-  const resolveValue = (publicField: keyof Character, secretField: keyof SecretProfile) => {
+  const resolveValue = (publicField: keyof Character, secretField: keyof SecretProfile): string => {
+    let val: any;
     if (isEditing) {
-      if (editLayer === 'SECRET') return formData.secretProfile?.[secretField];
-      return formData[publicField];
+      if (editLayer === 'SECRET') val = formData.secretProfile?.[secretField];
+      else val = formData[publicField];
+    } else {
+      // View Mode
+      if (isSecretRevealed && formData.secretProfile?.[secretField]) {
+         val = formData.secretProfile[secretField];
+      } else {
+         val = formData[publicField];
+      }
     }
-    // View Mode
-    if (isSecretRevealed && formData.secretProfile?.[secretField]) {
-       return formData.secretProfile[secretField];
-    }
-    return formData[publicField];
+    
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val;
+    // For numbers or booleans, convert to string
+    if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+    
+    // For objects/arrays (like ExtraFile[]), return empty string as this function is for text fields
+    return '';
   };
 
   const addExtraFile = () => {
@@ -754,19 +758,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         ? (currentAffiliations || []) 
         : (formData.affiliations || []);
     
-    // Allow duplicate names if ranks are different?
-    // Current logic: simple name check. 
-    // New logic: Check Name AND Rank combination? Or just warn?
-    // For simplicity, let's keep name check warning for manual entry, 
-    // but if importing a specific variant, we might want to allow it if it differs in rank.
-    // However, existing UI logic relies on unique names for keying sometimes.
-    // Let's stick to Name Check for now to avoid confusion, unless user insists.
-    // "Universal" import might fail if name exists.
-    
     if (currentList.some(a => a.name === nameToAdd.trim())) {
         if (!inputName) alert("이미 존재하는 태그입니다.");
-        // If importing, maybe we just want to update the rank? 
-        // For now, return to prevent duplicates.
         return;
     }
 
@@ -1207,238 +1200,296 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                           </div>
                           <div className="flex flex-col md:flex-row gap-2 mt-4 bg-stone-900/50 p-2 rounded-xl border border-stone-800/50">
                              <div className="relative flex-1" ref={tagMenuRef}>
-                                <input value={newAffiliationName} onChange={e => setNewAffiliationName(e.target.value)} className="w-full bg-transparent border-b border-stone-800 px-3 py-2 text-sm focus:outline-none focus:border-amber-500" placeholder="New Tag Name..."/>
-                                {hasExistingTags && (
-                                  <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                                    <button 
-                                      onClick={() => setIsTagMenuOpen(!isTagMenuOpen)}
-                                      className={`p-1 text-stone-500 hover:text-amber-500 transition-colors ${isTagMenuOpen ? 'text-amber-500' : ''}`}
-                                    >
-                                      <Icons.Menu size={16}/>
-                                    </button>
-                                    
-                                    {isTagMenuOpen && (
-                                      <div className="absolute right-0 top-full mt-2 w-64 max-h-72 overflow-y-auto bg-stone-900 border border-stone-700 rounded-lg shadow-2xl z-50 custom-scrollbar animate-in fade-in slide-in-from-top-2">
-                                        {/* Universal Tags */}
-                                        {groupedTags['Universal'] && groupedTags['Universal'].length > 0 && (
-                                          <div className="mb-2">
-                                            <div className="sticky top-0 bg-stone-900/95 backdrop-blur p-2 text-[10px] text-amber-500 uppercase font-bold border-b border-stone-800 flex items-center gap-1 z-10">
-                                              <Icons.Infinity size={12}/> Universal / Common
-                                            </div>
-                                            {groupedTags['Universal'].map(tag => (
-                                              <button 
-                                                key={`univ-${tag.name}`} 
-                                                onClick={() => {
-                                                  addAffiliation(tag.name, tag.rank);
-                                                }}
-                                                className="block w-full text-left px-4 py-2 text-xs text-stone-300 hover:bg-stone-800 hover:text-white truncate border-b border-stone-800/30 last:border-0"
-                                              >
-                                                {tag.name}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        )}
-                                        
-                                        {/* Campaign Tags */}
-                                        {Object.entries(groupedTags).map(([campName, tags]) => {
-                                          if (campName === 'Universal' || tags.length === 0) return null;
-                                          return (
-                                            <div key={campName} className="mb-2">
-                                              <div className="sticky top-0 bg-stone-900/95 backdrop-blur p-2 text-[10px] text-stone-500 uppercase font-bold border-b border-stone-800 truncate z-10" title={campName}>
-                                                {campName}
-                                              </div>
-                                              {tags.map(tag => (
-                                                <button 
-                                                  key={`${campName}-${tag.name}-${tag.rank}`} 
-                                                  onClick={() => addAffiliation(tag.name, tag.rank)}
-                                                  className="block w-full text-left px-4 py-2 text-xs text-stone-300 hover:bg-stone-800 hover:text-white truncate border-b border-stone-800/30 last:border-0 flex items-center gap-2"
-                                                >
+                                <input 
+                                   value={newAffiliationName} 
+                                   onChange={e => setNewAffiliationName(e.target.value)} 
+                                   onFocus={() => setIsTagMenuOpen(true)}
+                                   className={`w-full bg-transparent border-b ${tc.border} focus:border-amber-500 outline-none text-xs py-1 text-stone-300 placeholder:text-stone-600`}
+                                   placeholder="태그 입력 또는 선택..."
+                                />
+                                {isTagMenuOpen && hasExistingTags && (
+                                   <div className="absolute top-full left-0 w-full max-h-48 overflow-y-auto bg-stone-900 border border-stone-700 rounded-b-lg shadow-xl z-50 custom-scrollbar">
+                                      {Object.entries(groupedTags).map(([group, tags]) => (
+                                         <div key={group}>
+                                            <div className="px-2 py-1 bg-stone-800 text-[10px] font-bold text-stone-500 uppercase">{group}</div>
+                                            {tags.map((tag, idx) => (
+                                               <button 
+                                                 key={`${group}-${idx}`}
+                                                 onClick={() => {
+                                                    setNewAffiliationName(tag.name);
+                                                    if(tag.rank) { setNewAffiliationRank(tag.rank); setHasRank(true); }
+                                                    else { setNewAffiliationRank(''); setHasRank(false); }
+                                                    setIsTagMenuOpen(false);
+                                                 }}
+                                                 className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:bg-amber-900/30 hover:text-amber-400 flex justify-between"
+                                               >
                                                   <span>{tag.name}</span>
-                                                  {tag.rank && <span className="opacity-50 text-[10px] truncate ml-auto">| {tag.rank}</span>}
-                                                </button>
-                                              ))}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                             </div>
-                             <div className="flex items-center gap-2">
-                                <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap"><input type="checkbox" checked={hasRank} onChange={(e) => setHasRank(e.target.checked)} className="w-3 h-3 rounded bg-black border-stone-700 text-amber-600 focus:ring-0" /><span className="text-[10px] font-bold uppercase text-stone-500">Add Detail</span></label>
-                                {hasRank && <input value={newAffiliationRank} onChange={e => setNewAffiliationRank(e.target.value)} className="w-32 bg-transparent border-b border-stone-800 px-2 py-1 text-xs focus:outline-none focus:border-amber-500 animate-in fade-in slide-in-from-right-2" placeholder="Rank/Detail..."/>}
-                                <button onClick={() => addAffiliation()} className="px-4 py-1.5 bg-stone-800 text-stone-200 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-stone-700 transition-colors ml-2">Add</button>
-                             </div>
-                          </div>
-                       </div>
-                    ) : (
-                       <div className="flex flex-wrap gap-2">
-                          {currentAffiliations.map(aff => {
-                             const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
-                             const isSecretStyle = !isPublicRef && (isSecretRevealed || editLayer === 'SECRET');
-                             return (
-                             <span key={aff.id} className={`px-4 py-1.5 rounded-full text-[11px] font-black border tracking-tight ${aff.isStrikethrough ? 'line-through opacity-50 decoration-2 decoration-red-500' : ''} ${isSecretStyle ? `bg-black/40 ${tc.textAccent} border-current opacity-90` : `${tc.bgPanel} ${tc.border} ${tc.textMain}`}`}>
-                                {aff.name} {aff.rank && <span className="font-medium opacity-60 ml-1">| {aff.rank}</span>}
-                             </span>
-                          )})}
-                          {currentAffiliations.length === 0 && <span className="text-xs text-stone-700 italic">No affiliations recorded.</span>}
-                       </div>
-                    )}
-                 </div>
-
-                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                   {[ {f: 'age', l: '나이 (AGE)'}, {f: 'gender', l: '성별 (GENDER)'}, {f: 'height', l: '신장 (HEIGHT)'}, {f: 'weight', l: '체중 (WEIGHT)'} ].map(field => (
-                     <EditableField key={field.f} label={field.l} value={resolveValue(field.f as any, field.f as any)} onChange={v => editLayer === 'SECRET' ? updateSecretField(field.f as any, v) : setFormData(p => ({...p, [field.f]: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
-                   ))}
-                 </div>
-
-                 <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} type="textarea" isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
-              </div>
-            )}
-
-            {/* Other tabs omitted - no changes needed */}
-            {activeTab === 'BIO' && (
-              <div className="max-w-3xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
-                <EditableField 
-                  label="상세 설정 및 전기 (BIOGRAPHY)" 
-                  value={resolveValue('description', 'description')} 
-                  onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} 
-                  type="textarea" 
-                  minHeight="min-h-[600px]" 
-                  isEditing={isEditing} 
-                  themeClasses={tc} 
-                  highlight={editLayer === 'SECRET'} 
-                />
-              </div>
-            )}
-            
-            {activeTab === 'FILES' && (
-               <div className="space-y-8 max-w-4xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
-                {isEditing && <button onClick={addExtraFile} className="w-full py-5 border-2 border-dashed border-stone-800 rounded-2xl flex items-center justify-center gap-3 text-stone-500 hover:text-amber-500 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all font-black text-xs tracking-[0.2em] uppercase"><Icons.Plus size={18}/>새 데이터 노드 추가 (NEW DATA)</button>}
-                
-                {currentFiles.map(file => (
-                  <div key={file.id} className={`border-2 rounded-2xl p-6 md:p-8 ${tc.bgPanel} ${file.fileType === 'COMBAT' ? 'border-amber-900/30' : 'border-stone-800'} shadow-2xl`}>
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                      {isEditing ? <input value={file.title} onChange={e => updateExtraFile(file.id, 'title', e.target.value)} className="bg-transparent border-b border-stone-700 font-black text-xl outline-none focus:border-amber-500 w-full md:w-auto"/> : <h4 className="font-black text-2xl tracking-tighter uppercase">{file.title}</h4>}
-                      <div className="flex items-center gap-2">
-                        {isEditing && (
-                          <>
-                           <select value={file.fileType || 'REGULAR'} onChange={e => updateExtraFile(file.id, 'fileType', e.target.value)} className="bg-stone-900 border border-stone-700 text-[10px] font-black rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500 uppercase tracking-widest">
-                            <option value="REGULAR">General Info</option>
-                            <option value="COMBAT">Stats Overview</option>
-                           </select>
-                           {editLayer === 'PUBLIC' && <button onClick={() => toggleSecret(file.id, !file.isSecret)} className={`p-2 rounded-lg ${file.isSecret ? 'bg-red-900/50 text-red-200' : 'bg-stone-800 text-stone-500'}`} title="Toggle Secret"><Icons.Lock size={16}/></button>}
-                           {file.imageUrl && <button onClick={() => togglePortraitOverride(file.id, !file.useAsPortrait)} className={`p-2 rounded-lg ${file.useAsPortrait ? 'bg-yellow-600 text-white' : 'bg-stone-800 text-stone-500'}`} title="Use as Portrait"><Icons.User size={16}/></button>}
-                           <button onClick={() => removeExtraFile(file.id)} className="p-2 bg-stone-800 text-red-500 hover:bg-red-900/20 rounded-lg"><Icons.Trash size={16}/></button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* File Content Rendering Logic */}
-                    {file.imageUrl && <div className="mb-8 rounded-2xl overflow-hidden shadow-2xl border border-white/5 relative group bg-black/40">
-                       <img src={file.imageUrl} className={`w-full ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}/>
-                       {isEditing && (
-                           <button onClick={() => updateExtraFile(file.id, 'imageUrl', '')} className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white p-2 rounded-full backdrop-blur-md border border-white/10 transition-colors"><Icons.Close size={16}/></button>
-                       )}
-                    </div>}
-                    
-                    {isEditing && !file.imageUrl && (
-                       <div className="mb-6"><label className="flex items-center gap-2 cursor-pointer w-fit px-4 py-2 bg-stone-900 rounded-lg hover:bg-stone-800 text-xs font-bold text-stone-400"><Icons.Image size={16}/> Attach Image <input type="file" accept="image/*" className="hidden" onChange={(e) => handleExtraImageUpload(file.id, e)} /></label></div>
-                    )}
-                    
-                    {file.fileType === 'COMBAT' ? (
-                      <div className="flex flex-col items-center w-full">
-                        <RadarChart stats={file.combatStats || []} themeColor={tc.textAccent} hideLegend={isEditing} />
-                        {isEditing && (
-                           <div className="mt-6 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              {(file.combatStats || []).map((stat, idx) => (
-                                 <div key={idx} className="flex items-center gap-3 bg-black/40 p-3 rounded-xl border border-stone-800">
-                                    <input 
-                                      className={`w-24 bg-transparent border-b ${tc.border} text-xs font-bold text-center focus:border-amber-500 outline-none pb-1`}
-                                      value={stat.name}
-                                      onChange={(e) => {
-                                         const newStats = [...(file.combatStats || [])];
-                                         newStats[idx] = { ...stat, name: e.target.value };
-                                         updateExtraFile(file.id, 'combatStats', newStats);
-                                      }}
-                                      placeholder="Stat Name"
-                                    />
-                                    <div className="flex-1 flex flex-col gap-1">
-                                       <input 
-                                          type="range" min="1" max="5" step="1"
-                                          value={stat.value}
-                                          onChange={(e) => {
-                                             const newStats = [...(file.combatStats || [])];
-                                             newStats[idx] = { ...stat, value: parseInt(e.target.value) };
-                                             updateExtraFile(file.id, 'combatStats', newStats);
-                                          }}
-                                          className="w-full h-1.5 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-amber-600"
-                                       />
-                                       <div className="flex justify-between text-[8px] text-stone-500 font-mono px-1">
-                                          <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
-                                       </div>
-                                    </div>
-                                    <span className={`text-sm font-black w-6 text-center ${tc.textAccent}`}>{stat.value}</span>
-                                 </div>
-                              ))}
-                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      isEditing ? (
-                        <RichTextEditor 
-                          value={file.content} 
-                          onChange={e => updateExtraFile(file.id, 'content', e)} 
-                          minHeight="min-h-[500px]" 
-                          placeholder="Enter detailed information..."
-                        />
-                      ) : (
-                        <SimpleMarkdown text={file.content} className="text-sm md:text-base opacity-80 whitespace-pre-wrap leading-relaxed px-1 font-serif" />
-                      )
-                    )}
-                  </div>
-                ))}
-               </div>
-            )}
-            
-            {activeTab === 'COMMENTS' && (
-               <div className="h-full flex flex-col space-y-8 max-w-3xl mx-auto animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
-                  <div className="flex-1 space-y-6">
-                    {currentComments.map(c => {
-                       const styleConfig = COMMENT_STYLES[c.styleVariant as keyof typeof COMMENT_STYLES] || COMMENT_STYLES['NOTE'];
-                       const fontClass = COMMENT_FONTS[c.font as keyof typeof COMMENT_FONTS]?.class || 'font-sans';
-                       return (
-                       <div key={c.id} className={`p-5 rounded-xl border shadow-xl transition-all hover:scale-[1.01] group relative ${styleConfig.class}`}>
-                          <div className="flex justify-between text-[10px] mb-2 font-mono tracking-widest uppercase border-b border-current/20 pb-2">
-                             <div className="flex items-center gap-2"><span className="font-black opacity-90">{c.userName}</span></div>
-                             <div className="flex items-center gap-2">
-                                <span className="opacity-60">{new Date(c.createdAt).toLocaleDateString()}</span>
-                                {(isEditing || isSecretRevealed) && (
-                                   <div className="flex items-center gap-1 ml-2">
-                                      <button onClick={() => startEditingComment(c)} className="opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-all p-1"><Icons.Edit size={12} /></button>
-                                      <button onClick={() => confirmDeleteComment(c.id)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all p-1"><Icons.Close size={12}/></button>
+                                                  {tag.rank && <span className="opacity-50 text-[10px]">{tag.rank}</span>}
+                                               </button>
+                                            ))}
+                                         </div>
+                                      ))}
                                    </div>
                                 )}
                              </div>
+                             
+                             <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-1 cursor-pointer">
+                                   <input type="checkbox" checked={hasRank} onChange={e => setHasRank(e.target.checked)} className="rounded bg-black border-stone-700" />
+                                   <span className="text-[10px] text-stone-500">Rank?</span>
+                                </label>
+                                {hasRank && (
+                                   <input 
+                                     value={newAffiliationRank} 
+                                     onChange={e => setNewAffiliationRank(e.target.value)} 
+                                     className={`w-20 bg-transparent border-b ${tc.border} focus:border-amber-500 outline-none text-xs py-1 text-stone-300`} 
+                                     placeholder="직위/랭크"
+                                   />
+                                )}
+                                <button onClick={() => addAffiliation()} className="p-1 bg-stone-700 hover:bg-stone-600 rounded text-white"><Icons.Plus size={14}/></button>
+                             </div>
                           </div>
-                          <p className={`text-sm leading-relaxed whitespace-pre-wrap ${fontClass} opacity-90`}>{c.content}</p>
+                          <p className="text-[10px] text-stone-500 mt-2">* 드래그하여 순서 변경 가능. 공개/비공개 및 취소선 설정 가능.</p>
                        </div>
-                    )})}
-                    {currentComments.length === 0 && <div className="text-center py-20 text-stone-700 italic font-serif">기록된 정보가 없습니다.</div>}
+                    ) : (
+                       <div className="flex flex-wrap gap-2">
+                          {currentAffiliations.filter(a => !a.isHidden || isEditing || isSecretRevealed).map(aff => {
+                             const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
+                             const isSecretStyle = !isPublicRef && isSecretRevealed;
+                             // Dynamic Tag Style
+                             const tagClass = isSecretStyle 
+                                ? `border-current ${tc.textAccent} bg-current/10 ring-1 ring-white/10`
+                                : `bg-black/20 ${tc.textSub} border-stone-800`;
+
+                             return (
+                                <span key={aff.id} className={`text-xs px-2 py-1 rounded border ${aff.isStrikethrough ? 'line-through opacity-60' : ''} ${tagClass}`}>
+                                   {aff.name}
+                                   {aff.rank && <span className="opacity-60 ml-1">| {aff.rank}</span>}
+                                   {aff.isHidden && <Icons.EyeOff size={10} className="inline ml-1 opacity-50"/>}
+                                </span>
+                             );
+                          })}
+                          {currentAffiliations.length === 0 && <span className="text-xs opacity-30">- 없음 -</span>}
+                       </div>
+                    )}
                  </div>
-                 <div className="flex flex-col gap-4 p-6 bg-black/40 rounded-3xl border border-white/5 shadow-2xl">
-                    <div className="flex flex-col md:flex-row md:items-center gap-3 border-b border-white/5 pb-4">
-                      <div className="flex items-center gap-2 flex-1"><Icons.Edit size={16} className="text-amber-500" /><input value={commentName} onChange={e => setCommentName(e.target.value)} className="bg-transparent text-sm font-black uppercase tracking-widest p-1 focus:outline-none text-white w-full md:w-auto" placeholder="작성자 이름"/></div>
-                      <div className="flex flex-wrap items-center gap-2">
-                         <select value={commentStyle} onChange={e => setCommentStyle(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none">{Object.entries(COMMENT_STYLES).map(([key, conf]) => (<option key={key} value={key}>{conf.label}</option>))}</select>
-                         <input type="date" value={commentDate} onChange={e => setCommentDate(e.target.value)} className="bg-stone-900 text-[10px] text-stone-300 rounded px-2 py-1.5 border border-stone-700 outline-none" />
-                      </div>
-                    </div>
-                    <textarea value={commentText} onChange={e => setCommentText(e.target.value)} className={`bg-transparent text-sm leading-relaxed h-28 focus:outline-none transition-colors resize-none placeholder:opacity-20 ${COMMENT_FONTS[commentFont as keyof typeof COMMENT_FONTS]?.class || 'font-sans'}`} placeholder="새로운 기록을 입력하세요..." />
-                    <button onClick={submitComment} className="py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-lg transition-all bg-amber-700 text-white hover:bg-amber-600 active:scale-[0.98]">{editingCommentId ? '기록 수정' : '기록 추가'}</button>
+              </div>
+            )}
+
+            {/* BIO TAB */}
+            {activeTab === 'BIO' && (
+              <div className="space-y-6 max-w-3xl">
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <EditableField label="나이 (AGE)" value={resolveValue('age', 'age')} onChange={v => editLayer === 'SECRET' ? updateSecretField('age', v) : setFormData(p => ({...p, age: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                    <EditableField label="성별 (GENDER)" value={resolveValue('gender', 'gender')} onChange={v => editLayer === 'SECRET' ? updateSecretField('gender', v) : setFormData(p => ({...p, gender: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                    <EditableField label="키 (HEIGHT)" value={resolveValue('height', 'height')} onChange={v => editLayer === 'SECRET' ? updateSecretField('height', v) : setFormData(p => ({...p, height: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                    <EditableField label="몸무게 (WEIGHT)" value={resolveValue('weight', 'weight')} onChange={v => editLayer === 'SECRET' ? updateSecretField('weight', v) : setFormData(p => ({...p, weight: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
                  </div>
+                 <div className="grid md:grid-cols-2 gap-6">
+                    <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                    <EditableField label="상세 설명 (DESCRIPTION)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                 </div>
+              </div>
+            )}
+
+            {/* FILES TAB */}
+            {activeTab === 'FILES' && (
+               <div className="space-y-6 max-w-4xl">
+                  {isEditing && (
+                     <button onClick={addExtraFile} className={`w-full py-3 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 hover:bg-white/5 transition-colors ${editLayer === 'SECRET' ? `border-current ${tc.textAccent}` : 'border-stone-700 text-stone-500'}`}>
+                        <Icons.Plus size={20} />
+                        <span>{editLayer === 'SECRET' ? '시크릿 파일 추가' : '파일 추가'}</span>
+                     </button>
+                  )}
+                  
+                  <div className="grid gap-6">
+                     {currentFiles.map((file, index) => (
+                        <div key={file.id} className={`bg-black/20 border rounded-xl overflow-hidden ${file.isSecret ? `border-current ${tc.textAccent} bg-current/5` : 'border-stone-800'}`}>
+                           {/* Header */}
+                           <div className="flex items-center justify-between p-3 bg-black/40 border-b border-white/5">
+                              {isEditing ? (
+                                 <input value={file.title} onChange={e => updateExtraFile(file.id, 'title', e.target.value)} className="bg-transparent font-bold text-sm focus:outline-none flex-1" />
+                              ) : (
+                                 <div className="flex items-center gap-2">
+                                    <span className="font-bold text-sm">{file.title}</span>
+                                    {file.isSecret && <Icons.Lock size={12} className="opacity-70" />}
+                                    {file.useAsPortrait && <span className="text-[9px] bg-yellow-600/50 text-yellow-100 px-1.5 rounded">PORTRAIT</span>}
+                                 </div>
+                              )}
+                              
+                              {isEditing && (
+                                 <div className="flex items-center gap-2">
+                                    <button onClick={() => togglePortraitOverride(file.id, !file.useAsPortrait)} className={`p-1.5 rounded ${file.useAsPortrait ? 'text-yellow-400 bg-yellow-900/30' : 'text-stone-600 hover:text-stone-300'}`} title="초상화로 사용"><Icons.User size={16} /></button>
+                                    <button onClick={() => toggleSecret(file.id, !file.isSecret)} className={`p-1.5 rounded ${file.isSecret ? `${tc.textAccent} bg-current/20` : 'text-stone-600 hover:text-stone-300'}`} title="비밀 설정"><Icons.Lock size={16} /></button>
+                                    <button onClick={() => removeExtraFile(file.id)} className="p-1.5 text-red-500/50 hover:text-red-500"><Icons.Trash size={16} /></button>
+                                 </div>
+                              )}
+                           </div>
+                           
+                           {/* Content */}
+                           <div className="p-4 flex flex-col md:flex-row gap-6">
+                              {/* Image Section */}
+                              <div className="w-full md:w-1/3 space-y-2">
+                                 {file.imageUrl ? (
+                                    <div className="relative group rounded-lg overflow-hidden bg-black aspect-video md:aspect-square">
+                                       <img src={file.imageUrl} className={`w-full h-full ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="File" />
+                                       {isEditing && (
+                                          <button onClick={() => updateExtraFile(file.id, 'imageUrl', '')} className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Icons.Close size={12} /></button>
+                                       )}
+                                       {isEditing && (
+                                          <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             <button onClick={() => updateExtraFile(file.id, 'imageFit', 'cover')} className="px-2 py-0.5 text-[9px] bg-black/80 text-white rounded">Cover</button>
+                                             <button onClick={() => updateExtraFile(file.id, 'imageFit', 'contain')} className="px-2 py-0.5 text-[9px] bg-black/80 text-white rounded">Fit</button>
+                                          </div>
+                                       )}
+                                    </div>
+                                 ) : (
+                                    isEditing && (
+                                       <label className="flex flex-col items-center justify-center w-full aspect-video md:aspect-square bg-white/5 border border-dashed border-stone-700 rounded-lg cursor-pointer hover:bg-white/10 transition-colors">
+                                          <Icons.Upload size={24} className="text-stone-500 mb-2" />
+                                          <span className="text-xs text-stone-500">이미지 업로드</span>
+                                          <input type="file" className="hidden" onChange={e => handleExtraImageUpload(file.id, e)} />
+                                       </label>
+                                    )
+                                 )}
+
+                                 {/* Combat Stats (Radar Chart) */}
+                                 {file.fileType === 'COMBAT' && (
+                                    <div className="p-2 bg-black/40 rounded-lg">
+                                       <RadarChart stats={file.combatStats || []} themeColor={tc.textAccent} />
+                                    </div>
+                                 )}
+                              </div>
+
+                              {/* Text Section */}
+                              <div className="flex-1 min-w-0">
+                                 {isEditing ? (
+                                    <div className="h-full flex flex-col gap-2">
+                                       <select 
+                                         value={file.fileType || 'REGULAR'} 
+                                         onChange={e => updateExtraFile(file.id, 'fileType', e.target.value)}
+                                         className="bg-black/40 border border-stone-700 text-xs rounded p-1 w-fit"
+                                       >
+                                          <option value="REGULAR">일반 텍스트/이미지</option>
+                                          <option value="COMBAT">전투/스탯 데이터</option>
+                                       </select>
+                                       <RichTextEditor 
+                                          value={file.content} 
+                                          onChange={v => updateExtraFile(file.id, 'content', v)} 
+                                          className="flex-1 min-h-[150px]"
+                                          placeholder="내용을 입력하세요..."
+                                       />
+                                    </div>
+                                 ) : (
+                                    <div className="prose prose-invert prose-sm max-w-none">
+                                       <SimpleMarkdown text={file.content} />
+                                    </div>
+                                 )}
+                              </div>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            )}
+
+            {/* COMMENTS TAB */}
+            {activeTab === 'COMMENTS' && (
+               <div className="space-y-6 max-w-2xl mx-auto">
+                  {/* Write Area */}
+                  <div className={`p-4 rounded-xl border ${tc.bgPanel} ${tc.border} shadow-xl`}>
+                     <div className="flex justify-between items-center mb-4">
+                        <input 
+                           value={commentName} 
+                           onChange={e => setCommentName(e.target.value)} 
+                           className={`bg-transparent font-bold text-sm outline-none ${tc.textMain}`}
+                           placeholder="작성자 이름"
+                        />
+                        <input 
+                           type="date"
+                           value={commentDate}
+                           onChange={e => setCommentDate(e.target.value)}
+                           className="bg-transparent text-xs text-stone-500 outline-none"
+                        />
+                     </div>
+                     <textarea 
+                        value={commentText}
+                        onChange={e => setCommentText(e.target.value)}
+                        className={`w-full bg-black/20 rounded-lg p-3 text-sm min-h-[100px] outline-none resize-none mb-3 ${tc.textMain} placeholder:text-stone-600`}
+                        placeholder="기록을 남기세요..."
+                     />
+                     <div className="flex items-center justify-between">
+                        <div className="flex gap-2">
+                           {/* Style Selector */}
+                           <div className="relative group">
+                              <button className="p-1.5 rounded hover:bg-white/5 text-stone-400"><Icons.Palette size={16} /></button>
+                              <div className="absolute top-full left-0 mt-2 bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl z-50 hidden group-hover:block w-40">
+                                 {Object.entries(COMMENT_STYLES).map(([key, style]) => (
+                                    <button key={key} onClick={() => setCommentStyle(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentStyle === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
+                                       {style.label}
+                                    </button>
+                                 ))}
+                              </div>
+                           </div>
+                           {/* Font Selector */}
+                           <div className="relative group">
+                              <button className="p-1.5 rounded hover:bg-white/5 text-stone-400"><Icons.Bold size={16} /></button>
+                              <div className="absolute top-full left-0 mt-2 bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl z-50 hidden group-hover:block w-32">
+                                 {Object.entries(COMMENT_FONTS).map(([key, font]) => (
+                                    <button key={key} onClick={() => setCommentFont(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentFont === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
+                                       {font.label}
+                                    </button>
+                                 ))}
+                              </div>
+                           </div>
+                        </div>
+                        <button 
+                           onClick={submitComment}
+                           className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${!commentText.trim() ? 'bg-stone-800 text-stone-500' : 'bg-amber-700 text-white hover:bg-amber-600'}`}
+                           disabled={!commentText.trim()}
+                        >
+                           {editingCommentId ? '수정 완료' : '기록 남기기'}
+                        </button>
+                     </div>
+                  </div>
+
+                  {/* List Area */}
+                  <div className="space-y-4">
+                     {currentComments.sort((a,b) => b.createdAt - a.createdAt).map(comment => {
+                        const styleConfig = COMMENT_STYLES[comment.styleVariant as keyof typeof COMMENT_STYLES] || COMMENT_STYLES['NOTE'];
+                        const fontConfig = COMMENT_FONTS[comment.font as keyof typeof COMMENT_FONTS] || COMMENT_FONTS['SANS'];
+                        
+                        return (
+                           <div key={comment.id} className={`relative p-4 rounded-lg border transition-all ${styleConfig.class} ${fontConfig.class}`}>
+                              <div className="flex justify-between items-start mb-2 opacity-70 text-xs">
+                                 <span className="font-bold">{comment.userName}</span>
+                                 <div className="flex items-center gap-2">
+                                    <span>{new Date(comment.createdAt).toLocaleDateString()}</span>
+                                    {(isEditing || comment.userName === commentName) && ( // Allow edit if name matches or in global edit mode
+                                       <div className="flex gap-1 ml-2">
+                                          <button onClick={() => startEditingComment(comment)} className="hover:text-amber-400"><Icons.Edit size={12} /></button>
+                                          <button onClick={() => confirmDeleteComment(comment.id)} className="hover:text-red-400"><Icons.Close size={12} /></button>
+                                       </div>
+                                    )}
+                                 </div>
+                              </div>
+                              <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                 {comment.content}
+                              </div>
+                              {comment.styleVariant === 'STAMP' && (
+                                 <div className="absolute -right-2 -bottom-2 opacity-20 rotate-[-15deg] border-4 border-red-500 text-red-500 font-black text-4xl p-2 rounded-lg pointer-events-none select-none">
+                                    CONFIDENTIAL
+                                 </div>
+                              )}
+                           </div>
+                        );
+                     })}
+                     {currentComments.length === 0 && (
+                        <div className="text-center py-10 opacity-30 text-sm">
+                           기록된 코멘트가 없습니다.
+                        </div>
+                     )}
+                  </div>
                </div>
             )}
           </div>
