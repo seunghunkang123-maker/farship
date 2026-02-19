@@ -36,11 +36,9 @@ const COMMENT_FONTS = {
 // --- Helper Components ---
 
 // 1. Simple Markdown Render (Display)
-// Supports **Bold** and *Italic*
 const SimpleMarkdown: React.FC<{ text: string; className?: string }> = ({ text, className = "" }) => {
   if (!text) return <span className="opacity-50">-</span>;
 
-  // Split by newlines first to preserve line breaks
   return (
     <div className={className}>
       {text.split('\n').map((line, i) => (
@@ -61,7 +59,6 @@ const SimpleMarkdown: React.FC<{ text: string; className?: string }> = ({ text, 
 };
 
 // 2. Rich Text Editor (Input)
-// Provides toolbar for Bold/Italic and a larger textarea
 interface RichTextEditorProps {
   value: string;
   onChange: (val: string) => void;
@@ -86,7 +83,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
     
     onChange(newVal);
 
-    // Restore focus and cursor
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + symbol.length, end + symbol.length);
@@ -307,6 +303,8 @@ const EditableField: React.FC<EditableFieldProps> = ({
 interface CharacterDetailProps {
   character: Character | null;
   campaign: Campaign;
+  allCharacters?: Character[]; 
+  allCampaigns?: Campaign[]; // New prop for grouping tags
   onSave: (char: Character) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -321,8 +319,13 @@ interface CharacterDetailProps {
   onToggleNameReveal?: (id: string, state: boolean) => void;
 }
 
+interface TagItem {
+  name: string;
+  rank?: string;
+}
+
 const CharacterDetail: React.FC<CharacterDetailProps> = ({ 
-  character, campaign, onSave, onDelete, onClose, isEditingNew = false,
+  character, campaign, allCharacters = [], allCampaigns = [], onSave, onDelete, onClose, isEditingNew = false,
   onAddComment, onUpdateComment, onDeleteComment, isGlobalReveal = false, isRevealed = false, onToggleReveal,
   isNameRevealed = false, onToggleNameReveal
 }) => {
@@ -344,10 +347,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
+  // Tag Menu State
+  const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
+  const tagMenuRef = useRef<HTMLDivElement>(null);
+
   // Comment Editing
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [tempEditComment, setTempEditComment] = useState<CharacterComment | null>(null);
-  const [tempEditDate, setTempEditDate] = useState('');
 
   // Creation Form State
   const [commentName, setCommentName] = useState('관찰자');
@@ -367,6 +372,125 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     isNpc: false, imageFit: 'cover', summary: '', description: '', extraFiles: [], comments: [],
     updatedAt: Date.now(), alias: '', isNameBlurred: false, affiliations: []
   });
+
+  // Handle outside click for Tag Menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tagMenuRef.current && !tagMenuRef.current.contains(event.target as Node)) {
+        setIsTagMenuOpen(false);
+      }
+    };
+
+    if (isTagMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTagMenuOpen]);
+
+  // Group tags by campaign for the dropdown
+  // Returns: Record<CampaignName, TagItem[]>
+  const groupedTags: Record<string, TagItem[]> = useMemo(() => {
+    const tagsByCampaign: Record<string, Set<string>> = {};
+    const campaignMap = new Map(allCampaigns.map(c => [c.id, c.name]));
+
+    // 1. Collect all tags (storing them as JSON strings to ensure uniqueness of objects)
+    allCharacters.forEach(c => {
+      const campName = campaignMap.get(c.campaignId) || 'Unknown Campaign';
+      if (!tagsByCampaign[campName]) tagsByCampaign[campName] = new Set();
+
+      const processTag = (name: string, rank?: string) => {
+        // Store as stringified object to handle uniqueness
+        tagsByCampaign[campName].add(JSON.stringify({ name, rank: rank || '' }));
+      };
+
+      c.affiliations?.forEach(a => processTag(a.name, a.rank));
+      c.secretProfile?.affiliations?.forEach(a => processTag(a.name, a.rank));
+    });
+
+    // 2. Identify Universal Tags
+    // Strategy: Determine "Universal" based on Name only appearing in >= 2 campaigns
+    // But for import purposes, we want to allow importing specific variations.
+    // For simplicity:
+    // - "Universal": List distinct NAMEs that appear in multiple campaigns (generic import).
+    // - "Campaigns": List full details {name, rank} for specific imports.
+    
+    const tagNameCounts = new Map<string, Set<string>>();
+    
+    Object.entries(tagsByCampaign).forEach(([campName, tagSet]) => {
+        tagSet.forEach(jsonStr => {
+            const { name } = JSON.parse(jsonStr);
+            if (!tagNameCounts.has(name)) tagNameCounts.set(name, new Set());
+            tagNameCounts.get(name)?.add(campName);
+        });
+    });
+
+    const universalTagNames = Array.from(tagNameCounts.entries())
+        .filter(([_, campSet]) => campSet.size >= 2)
+        .map(([name]) => ({ name, rank: '' })) // Universal import usually implies no rank
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    // 3. Convert Sets back to Objects and Sort
+    const campaignTags: Record<string, TagItem[]> = {};
+    Object.entries(tagsByCampaign).forEach(([campName, tagSet]) => {
+        const sortedTags = Array.from(tagSet)
+            .map(jsonStr => JSON.parse(jsonStr) as TagItem)
+            .sort((a, b) => {
+                const nameComp = a.name.localeCompare(b.name);
+                if (nameComp !== 0) return nameComp;
+                return (a.rank || '').localeCompare(b.rank || '');
+            });
+        if (sortedTags.length > 0) {
+            campaignTags[campName] = sortedTags;
+        }
+    });
+
+    return {
+      Universal: universalTagNames,
+      ...campaignTags
+    };
+  }, [allCharacters, allCampaigns]);
+
+  // Check if any tags exist
+  const hasExistingTags = useMemo(() => {
+    return Object.values(groupedTags).some(arr => arr.length > 0);
+  }, [groupedTags]);
+
+  const currentAffiliations: CharacterAffiliation[] = useMemo(() => {
+    const publicAffs = formData.affiliations || [];
+    const secretAffs = formData.secretProfile?.affiliations || [];
+
+    if (editLayer === 'PUBLIC' && isEditing) {
+       return publicAffs;
+    }
+
+    if ((editLayer === 'SECRET' && isEditing) || (!isEditing && isSecretRevealed)) {
+        const secretMap = new Map(secretAffs.map(a => [a.name, a]));
+        const merged = [...secretAffs];
+        publicAffs.forEach(pa => {
+            if (!secretMap.has(pa.name)) {
+                merged.push({ ...pa, id: `virtual-${pa.id}` }); 
+            }
+        });
+        if (!isEditing) {
+           return merged.filter(a => !a.isHidden);
+        }
+        return merged;
+    }
+    return publicAffs;
+  }, [formData, isEditing, editLayer, isSecretRevealed]);
+
+  const currentFiles: ExtraFile[] = useMemo(() => {
+    if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
+    return isSecretRevealed ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
+  }, [formData, isEditing, editLayer, isSecretRevealed]);
+
+  const currentComments: CharacterComment[] = useMemo(() => {
+    if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.comments || []) : formData.comments;
+    return isSecretRevealed ? (formData.secretProfile?.comments || []) : formData.comments;
+  }, [formData, isEditing, editLayer, isSecretRevealed]);
+
 
   useEffect(() => {
     if (character) {
@@ -400,6 +524,177 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       }
     }
   }, [character, campaign, isEditing]);
+
+  const updateSecretField = (field: keyof SecretProfile, value: any) => {
+    setFormData(prev => ({ ...prev, secretProfile: { ...(prev.secretProfile || {}), [field]: value } }));
+  };
+
+  const resolveValue = (publicField: keyof Character, secretField: keyof SecretProfile) => {
+    if (isEditing) {
+      if (editLayer === 'SECRET') return formData.secretProfile?.[secretField];
+      return formData[publicField];
+    }
+    // View Mode
+    if (isSecretRevealed && formData.secretProfile?.[secretField]) {
+       return formData.secretProfile[secretField];
+    }
+    return formData[publicField];
+  };
+
+  const addExtraFile = () => {
+    const newFile: ExtraFile = {
+      id: crypto.randomUUID(),
+      title: '새 항목',
+      content: '',
+      fileType: 'REGULAR',
+      isSecret: editLayer === 'SECRET',
+      useAsPortrait: false,
+      combatStats: [],
+      imageFit: 'cover'
+    };
+    
+    if (editLayer === 'SECRET') {
+        const current = formData.secretProfile?.extraFiles || [];
+        updateSecretField('extraFiles', [newFile, ...current]);
+    } else {
+        setFormData(prev => ({ ...prev, extraFiles: [newFile, ...prev.extraFiles] }));
+    }
+  };
+
+  const updateExtraFile = (id: string, field: keyof ExtraFile, value: any) => {
+     const updater = (list: ExtraFile[]) => list.map(f => f.id === id ? { ...f, [field]: value } : f);
+     if (editLayer === 'SECRET') {
+         const current = formData.secretProfile?.extraFiles || [];
+         updateSecretField('extraFiles', updater(current));
+     } else {
+         setFormData(prev => ({ ...prev, extraFiles: updater(prev.extraFiles) }));
+     }
+  };
+
+  const removeExtraFile = (id: string) => {
+     const filter = (list: ExtraFile[]) => list.filter(f => f.id !== id);
+     if (editLayer === 'SECRET') {
+         const current = formData.secretProfile?.extraFiles || [];
+         updateSecretField('extraFiles', filter(current));
+     } else {
+         setFormData(prev => ({ ...prev, extraFiles: filter(prev.extraFiles) }));
+     }
+  };
+
+  const toggleSecret = (id: string, isSecret: boolean) => {
+     updateExtraFile(id, 'isSecret', isSecret);
+  };
+
+  const togglePortraitOverride = (id: string, useAsPortrait: boolean) => {
+     // Enforce single portrait for simplicity or just toggle current
+     const singleUpdater = (list: ExtraFile[]) => list.map(f => f.id === id ? { ...f, useAsPortrait } : { ...f, useAsPortrait: false });
+     
+     if (useAsPortrait) {
+         if (editLayer === 'SECRET') {
+             updateSecretField('extraFiles', singleUpdater(formData.secretProfile?.extraFiles || []));
+         } else {
+             setFormData(prev => ({ ...prev, extraFiles: singleUpdater(prev.extraFiles) }));
+         }
+     } else {
+         updateExtraFile(id, 'useAsPortrait', false);
+     }
+  };
+
+  const handleExtraImageUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+     if (e.target.files?.[0]) {
+        try {
+           const url = await uploadImage(e.target.files[0]);
+           updateExtraFile(id, 'imageUrl', url);
+        } catch (err) {
+           alert("이미지 업로드 실패");
+        }
+     }
+  };
+
+  const startEditingComment = (comment: CharacterComment) => {
+     setEditingCommentId(comment.id);
+     setCommentName(comment.userName);
+     setCommentText(comment.content);
+     setCommentStyle(comment.styleVariant);
+     setCommentFont(comment.font || 'SANS');
+     const d = new Date(comment.createdAt);
+     const dateStr = d.toISOString().split('T')[0];
+     setCommentDate(dateStr);
+  };
+
+  const submitComment = () => {
+     if (!commentText.trim()) return;
+     
+     const timestamp = new Date(commentDate).getTime();
+
+     if (editingCommentId) {
+        // Update existing
+        const updated: CharacterComment = {
+            id: editingCommentId,
+            characterId: formData.id,
+            userName: commentName,
+            content: commentText,
+            styleVariant: commentStyle as any,
+            font: commentFont,
+            createdAt: timestamp
+        };
+        
+        if (isEditing && editLayer === 'SECRET') {
+            const current = formData.secretProfile?.comments || [];
+            updateSecretField('comments', current.map(c => c.id === editingCommentId ? updated : c));
+        } else {
+            if (onUpdateComment) onUpdateComment(updated);
+            setFormData(prev => ({
+                ...prev,
+                comments: prev.comments.map(c => c.id === editingCommentId ? updated : c)
+            }));
+        }
+        setEditingCommentId(null);
+     } else {
+        // Add new
+        const newComment: CharacterComment = {
+            id: crypto.randomUUID(),
+            characterId: formData.id,
+            userName: commentName,
+            content: commentText,
+            styleVariant: commentStyle as any,
+            font: commentFont,
+            createdAt: timestamp
+        };
+
+        if (isEditing && editLayer === 'SECRET') {
+            const current = formData.secretProfile?.comments || [];
+            updateSecretField('comments', [...current, newComment]);
+        } else {
+            if (onAddComment) onAddComment(newComment);
+            setFormData(prev => ({
+                ...prev,
+                comments: [...prev.comments, newComment]
+            }));
+        }
+     }
+     setCommentText('');
+  };
+
+  const confirmDeleteComment = (commentId: string) => {
+      if (!window.confirm("정말 삭제하시겠습니까?")) return;
+      
+      if (isEditing && editLayer === 'SECRET') {
+          const current = formData.secretProfile?.comments || [];
+          updateSecretField('comments', current.filter(c => c.id !== commentId));
+      } else {
+          if (onDeleteComment) onDeleteComment(commentId, formData.id);
+          setFormData(prev => ({
+              ...prev,
+              comments: prev.comments.filter(c => c.id !== commentId)
+          }));
+      }
+      
+      if (editingCommentId === commentId) {
+          setEditingCommentId(null);
+          setCommentText('');
+      }
+  };
 
   const handleToggleReveal = () => {
     if (isGlobalReveal) return;
@@ -440,34 +735,63 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     setIsEditing(false);
   };
 
-  const updateSecretField = (field: keyof SecretProfile, value: any) => {
-    setFormData(prev => ({ ...prev, secretProfile: { ...(prev.secretProfile || {}), [field]: value } }));
-  };
+  const addAffiliation = (inputName?: string, inputRank?: string) => {
+    const nameToAdd = inputName || newAffiliationName;
+    if (!nameToAdd.trim()) return;
+    
+    // Determine Rank: Use Input (Import) OR Manual Input
+    let rankToAdd = undefined;
+    if (inputName) {
+        // If imported from list, inputRank can be used (even if empty/undefined)
+        rankToAdd = inputRank; 
+    } else {
+        // Manual entry
+        rankToAdd = hasRank ? newAffiliationRank.trim() : undefined;
+    }
 
-  const addAffiliation = () => {
-    if (!newAffiliationName.trim()) return;
+    // Check duplication in current list
+    const currentList = editLayer === 'SECRET' 
+        ? (currentAffiliations || []) 
+        : (formData.affiliations || []);
+    
+    // Allow duplicate names if ranks are different?
+    // Current logic: simple name check. 
+    // New logic: Check Name AND Rank combination? Or just warn?
+    // For simplicity, let's keep name check warning for manual entry, 
+    // but if importing a specific variant, we might want to allow it if it differs in rank.
+    // However, existing UI logic relies on unique names for keying sometimes.
+    // Let's stick to Name Check for now to avoid confusion, unless user insists.
+    // "Universal" import might fail if name exists.
+    
+    if (currentList.some(a => a.name === nameToAdd.trim())) {
+        if (!inputName) alert("이미 존재하는 태그입니다.");
+        // If importing, maybe we just want to update the rank? 
+        // For now, return to prevent duplicates.
+        return;
+    }
+
     const newAff: CharacterAffiliation = {
       id: crypto.randomUUID(),
-      name: newAffiliationName.trim(),
-      rank: hasRank ? newAffiliationRank.trim() : undefined,
+      name: nameToAdd.trim(),
+      rank: rankToAdd,
       isStrikethrough: false,
       isHidden: false
     };
 
     if (editLayer === 'SECRET') {
-      const currentList = currentAffiliations; 
       const cleanList = [...currentList, newAff].map(a => 
         a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
       );
       updateSecretField('affiliations', cleanList);
     } else {
-      const currentList = formData.affiliations || [];
-      setFormData(prev => ({ ...prev, affiliations: [...currentList, newAff] }));
+      setFormData(prev => ({ ...prev, affiliations: [...(prev.affiliations || []), newAff] }));
     }
 
-    setNewAffiliationName('');
-    setNewAffiliationRank('');
-    setHasRank(false);
+    if (!inputName) {
+        setNewAffiliationName('');
+        setNewAffiliationRank('');
+        setHasRank(false);
+    }
   };
 
   const removeAffiliation = (index: number, aff: CharacterAffiliation) => {
@@ -571,187 +895,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     dragOverItem.current = null;
   };
 
-  const resolveValue = (field: keyof Character, secretField: keyof SecretProfile): string => {
-    if (isEditing) {
-      if (editLayer === 'SECRET') return (formData.secretProfile?.[secretField] as string) || '';
-      return (formData[field] as string) || '';
-    } else {
-      if (isSecretRevealed) {
-         const secretVal = formData.secretProfile?.[secretField] as string | undefined;
-         return (secretVal && secretVal.trim() !== '') ? secretVal : ((formData[field] as string) || '');
-      }
-      return (formData[field] as string) || '';
-    }
-  };
-
-  const currentAffiliations = useMemo(() => {
-    const publicAffs = formData.affiliations || [];
-    const secretAffs = formData.secretProfile?.affiliations || [];
-
-    if (editLayer === 'PUBLIC' && isEditing) {
-       return publicAffs;
-    }
-
-    if ((editLayer === 'SECRET' && isEditing) || (!isEditing && isSecretRevealed)) {
-        const secretMap = new Map(secretAffs.map(a => [a.name, a]));
-        const merged = [...secretAffs];
-        publicAffs.forEach(pa => {
-            if (!secretMap.has(pa.name)) {
-                merged.push({ ...pa, id: `virtual-${pa.id}` }); 
-            }
-        });
-        if (!isEditing) {
-           return merged.filter(a => !a.isHidden);
-        }
-        return merged;
-    }
-    return publicAffs;
-  }, [formData, isEditing, editLayer, isSecretRevealed]);
-
-  const currentFiles = useMemo(() => {
-    if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
-    return isSecretRevealed ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
-  }, [formData, isEditing, editLayer, isSecretRevealed]);
-
-  const currentComments = useMemo(() => {
-    if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.comments || []) : formData.comments;
-    return isSecretRevealed ? (formData.secretProfile?.comments || []) : formData.comments;
-  }, [formData, isEditing, editLayer, isSecretRevealed]);
-
-  const addExtraFile = () => {
-    const newFile: ExtraFile = { 
-      id: crypto.randomUUID(), 
-      title: editLayer === 'SECRET' ? '새 비밀 항목' : '새 항목', 
-      content: '', 
-      fileType: 'REGULAR',
-      combatStats: Array(6).fill(null).map((_, i) => ({ name: `STAT_${i+1}`, value: 3 })) 
-    };
-    if (editLayer === 'SECRET') {
-       const newFiles = [...(formData.secretProfile?.extraFiles || []), newFile];
-       updateSecretField('extraFiles', newFiles);
-    } else {
-       setFormData(prev => ({ ...prev, extraFiles: [...prev.extraFiles, newFile] }));
-    }
-  };
-
-  const removeExtraFile = (id: string) => {
-    if (editLayer === 'SECRET') {
-       const newFiles = (formData.secretProfile?.extraFiles || []).filter(f => f.id !== id);
-       updateSecretField('extraFiles', newFiles);
-    } else {
-       setFormData(prev => ({ ...prev, extraFiles: prev.extraFiles.filter(f => f.id !== id) }));
-    }
-  };
-
-  const updateExtraFile = (id: string, field: keyof ExtraFile, val: any) => {
-    if (editLayer === 'SECRET') {
-       const newFiles = (formData.secretProfile?.extraFiles || []).map(f => f.id === id ? { ...f, [field]: val } : f);
-       updateSecretField('extraFiles', newFiles);
-    } else {
-       setFormData(prev => ({ ...prev, extraFiles: prev.extraFiles.map(f => f.id === id ? { ...f, [field]: val } : f) }));
-    }
-  };
-
-  const handleExtraImageUpload = async (fileId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      try {
-        const url = await uploadImage(e.target.files[0]);
-        updateExtraFile(fileId, 'imageUrl', url);
-      } catch (error) {
-        alert("이미지 업로드 실패: " + (error as Error).message);
-      }
-    }
-  };
-
-  const togglePortraitOverride = (fileId: string, isChecked: boolean) => {
-    if (editLayer === 'SECRET') {
-       const newFiles = (formData.secretProfile?.extraFiles || []).map(f => ({ ...f, useAsPortrait: f.id === fileId ? isChecked : false }));
-       updateSecretField('extraFiles', newFiles);
-    } else {
-       setFormData(prev => ({ ...prev, extraFiles: prev.extraFiles.map(f => ({ ...f, useAsPortrait: f.id === fileId ? isChecked : false })) }));
-    }
-  };
-
-  const toggleSecret = (fileId: string, isSecret: boolean) => updateExtraFile(fileId, 'isSecret', isSecret);
-
-  const submitComment = () => {
-    if (!commentText.trim()) return;
-    const selectedTime = commentDate ? new Date(commentDate).getTime() : Date.now();
-    const newComment: CharacterComment = {
-      id: crypto.randomUUID(), characterId: formData.id, userName: commentName || '익명',
-      content: commentText, styleVariant: commentStyle as any, font: commentFont, createdAt: selectedTime
-    };
-    
-    if ((isEditing && editLayer === 'SECRET') || (!isEditing && isSecretRevealed)) {
-       const newComments = [...(formData.secretProfile?.comments || []), newComment];
-       if (!isEditing) {
-          const updatedChar = {
-             ...formData,
-             secretProfile: { ...(formData.secretProfile || {}), comments: newComments }
-          };
-          setFormData(updatedChar);
-          onSave(updatedChar); 
-       } else {
-          updateSecretField('comments', newComments);
-       }
-    } 
-    else {
-      if (onAddComment) onAddComment(newComment); 
-    }
-    setCommentText('');
-  };
-
-  const startEditingComment = (comment: CharacterComment) => {
-    setEditingCommentId(comment.id);
-    setTempEditComment({ ...comment });
-    setTempEditDate(new Date(comment.createdAt).toISOString().split('T')[0]);
-  };
-
-  const cancelEditingComment = () => {
-    setEditingCommentId(null);
-    setTempEditComment(null);
-    setTempEditDate('');
-  };
-
-  const saveEditingComment = () => {
-    if (!tempEditComment) return;
-    const updatedTime = tempEditDate ? new Date(tempEditDate).getTime() : tempEditComment.createdAt;
-    const updatedComment = { ...tempEditComment, createdAt: updatedTime };
-    
-    if ((isEditing && editLayer === 'SECRET') || (!isEditing && isSecretRevealed)) {
-        const currentComments = formData.secretProfile?.comments || [];
-        const newComments = currentComments.map(c => c.id === updatedComment.id ? updatedComment : c);
-        
-        if (!isEditing) {
-           const updatedChar = { ...formData, secretProfile: { ...(formData.secretProfile || {}), comments: newComments } };
-           setFormData(updatedChar);
-           onSave(updatedChar);
-        } else {
-           updateSecretField('comments', newComments);
-        }
-    } else {
-       if (onUpdateComment) onUpdateComment(updatedComment);
-    }
-    cancelEditingComment();
-  };
-
-  const confirmDeleteComment = (commentId: string) => {
-    if (confirm("이 기록을 삭제하시겠습니까?")) {
-      if ((isEditing && editLayer === 'SECRET') || (!isEditing && isSecretRevealed)) {
-         const newComments = (formData.secretProfile?.comments || []).filter(c => c.id !== commentId);
-         if (!isEditing) {
-             const updatedChar = { ...formData, secretProfile: { ...(formData.secretProfile || {}), comments: newComments } };
-             setFormData(updatedChar);
-             onSave(updatedChar);
-         } else {
-            updateSecretField('comments', newComments);
-         }
-      } else {
-         if (onDeleteComment) onDeleteComment(commentId, formData.id);
-      }
-    }
-  };
-
   const activePortraitFile = useMemo(() => {
     const candidates = currentFiles.filter(f => f.useAsPortrait && f.imageUrl);
     const reversed = [...candidates].reverse();
@@ -805,6 +948,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         
         {/* Left Column - Portrait & Status (Sidebar) */}
         <div className={`w-full md:w-[512px] p-6 md:p-8 flex flex-col border-r shrink-0 ${tc.bgPanel} ${tc.border} md:overflow-y-auto custom-scrollbar`}>
+          {/* ... Sidebar content omitted for brevity ... */}
           <div className="flex justify-between md:hidden mb-6">
             <button onClick={onClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
             <button onClick={handleSave} className="px-4 py-2 bg-amber-700 text-white rounded-lg font-black text-xs">저장</button>
@@ -925,7 +1069,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'INFO' && (
               <div className="space-y-10 max-w-3xl">
                  <div className="grid md:grid-cols-2 gap-8">
+                    {/* ... (First column content omitted - same as before) ... */}
                     <div className="col-span-2 md:col-span-1 space-y-6">
+                       {/* Character Type, Alias, Name - Code Omitted for Brevity (Same as before) */}
                        {isEditing ? (
                           <>
                            {editLayer === 'PUBLIC' ? (
@@ -982,7 +1128,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                       <div className="text-xl font-black text-amber-100">{formData.secretProfile.alias}</div>
                                    </div>
                                  )}
-                                 <EditableField label="진명 (TRUE NAME)" value={resolveValue('name', 'name')} onChange={()=>{}} isEditing={false} themeClasses={tc} highlight={true} />
+                                 <div className="mb-6">
+                                    <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block ${tc.textAccent}`}>진명 (TRUE NAME)</label>
+                                    <div className="text-xl font-black text-stone-200">
+                                       {resolveValue('name', 'name')}
+                                    </div>
+                                 </div>
                               </>
                            ) : (
                               <>
@@ -1055,11 +1206,69 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                              )})}
                           </div>
                           <div className="flex flex-col md:flex-row gap-2 mt-4 bg-stone-900/50 p-2 rounded-xl border border-stone-800/50">
-                             <input value={newAffiliationName} onChange={e => setNewAffiliationName(e.target.value)} className="flex-1 bg-transparent border-b border-stone-800 px-3 py-2 text-sm focus:outline-none focus:border-amber-500" placeholder="New Tag Name..."/>
+                             <div className="relative flex-1" ref={tagMenuRef}>
+                                <input value={newAffiliationName} onChange={e => setNewAffiliationName(e.target.value)} className="w-full bg-transparent border-b border-stone-800 px-3 py-2 text-sm focus:outline-none focus:border-amber-500" placeholder="New Tag Name..."/>
+                                {hasExistingTags && (
+                                  <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                                    <button 
+                                      onClick={() => setIsTagMenuOpen(!isTagMenuOpen)}
+                                      className={`p-1 text-stone-500 hover:text-amber-500 transition-colors ${isTagMenuOpen ? 'text-amber-500' : ''}`}
+                                    >
+                                      <Icons.Menu size={16}/>
+                                    </button>
+                                    
+                                    {isTagMenuOpen && (
+                                      <div className="absolute right-0 top-full mt-2 w-64 max-h-72 overflow-y-auto bg-stone-900 border border-stone-700 rounded-lg shadow-2xl z-50 custom-scrollbar animate-in fade-in slide-in-from-top-2">
+                                        {/* Universal Tags */}
+                                        {groupedTags['Universal'] && groupedTags['Universal'].length > 0 && (
+                                          <div className="mb-2">
+                                            <div className="sticky top-0 bg-stone-900/95 backdrop-blur p-2 text-[10px] text-amber-500 uppercase font-bold border-b border-stone-800 flex items-center gap-1 z-10">
+                                              <Icons.Infinity size={12}/> Universal / Common
+                                            </div>
+                                            {groupedTags['Universal'].map(tag => (
+                                              <button 
+                                                key={`univ-${tag.name}`} 
+                                                onClick={() => {
+                                                  addAffiliation(tag.name, tag.rank);
+                                                }}
+                                                className="block w-full text-left px-4 py-2 text-xs text-stone-300 hover:bg-stone-800 hover:text-white truncate border-b border-stone-800/30 last:border-0"
+                                              >
+                                                {tag.name}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                        
+                                        {/* Campaign Tags */}
+                                        {Object.entries(groupedTags).map(([campName, tags]) => {
+                                          if (campName === 'Universal' || tags.length === 0) return null;
+                                          return (
+                                            <div key={campName} className="mb-2">
+                                              <div className="sticky top-0 bg-stone-900/95 backdrop-blur p-2 text-[10px] text-stone-500 uppercase font-bold border-b border-stone-800 truncate z-10" title={campName}>
+                                                {campName}
+                                              </div>
+                                              {tags.map(tag => (
+                                                <button 
+                                                  key={`${campName}-${tag.name}-${tag.rank}`} 
+                                                  onClick={() => addAffiliation(tag.name, tag.rank)}
+                                                  className="block w-full text-left px-4 py-2 text-xs text-stone-300 hover:bg-stone-800 hover:text-white truncate border-b border-stone-800/30 last:border-0 flex items-center gap-2"
+                                                >
+                                                  <span>{tag.name}</span>
+                                                  {tag.rank && <span className="opacity-50 text-[10px] truncate ml-auto">| {tag.rank}</span>}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                             </div>
                              <div className="flex items-center gap-2">
                                 <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap"><input type="checkbox" checked={hasRank} onChange={(e) => setHasRank(e.target.checked)} className="w-3 h-3 rounded bg-black border-stone-700 text-amber-600 focus:ring-0" /><span className="text-[10px] font-bold uppercase text-stone-500">Add Detail</span></label>
                                 {hasRank && <input value={newAffiliationRank} onChange={e => setNewAffiliationRank(e.target.value)} className="w-32 bg-transparent border-b border-stone-800 px-2 py-1 text-xs focus:outline-none focus:border-amber-500 animate-in fade-in slide-in-from-right-2" placeholder="Rank/Detail..."/>}
-                                <button onClick={addAffiliation} className="px-4 py-1.5 bg-stone-800 text-stone-200 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-stone-700 transition-colors ml-2">Add</button>
+                                <button onClick={() => addAffiliation()} className="px-4 py-1.5 bg-stone-800 text-stone-200 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-stone-700 transition-colors ml-2">Add</button>
                              </div>
                           </div>
                        </div>
@@ -1088,6 +1297,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
               </div>
             )}
 
+            {/* Other tabs omitted - no changes needed */}
             {activeTab === 'BIO' && (
               <div className="max-w-3xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
                 <EditableField 
@@ -1227,7 +1437,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                       </div>
                     </div>
                     <textarea value={commentText} onChange={e => setCommentText(e.target.value)} className={`bg-transparent text-sm leading-relaxed h-28 focus:outline-none transition-colors resize-none placeholder:opacity-20 ${COMMENT_FONTS[commentFont as keyof typeof COMMENT_FONTS]?.class || 'font-sans'}`} placeholder="새로운 기록을 입력하세요..." />
-                    <button onClick={submitComment} className="py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-lg transition-all bg-amber-700 text-white hover:bg-amber-600 active:scale-[0.98]">기록 추가</button>
+                    <button onClick={submitComment} className="py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-lg transition-all bg-amber-700 text-white hover:bg-amber-600 active:scale-[0.98]">{editingCommentId ? '기록 수정' : '기록 추가'}</button>
                  </div>
                </div>
             )}

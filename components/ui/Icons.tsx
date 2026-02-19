@@ -28,7 +28,8 @@ import {
   EyeOff,
   Tag,
   Bold,
-  Italic
+  Italic,
+  Library
 } from 'lucide-react';
 
 export const Icons = {
@@ -60,5 +61,6 @@ export const Icons = {
   EyeOff,
   Tag,
   Bold,
-  Italic
+  Italic,
+  Library
 };

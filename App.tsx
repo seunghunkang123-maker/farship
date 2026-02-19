@@ -7,6 +7,7 @@ import MainDashboard from './components/views/MainDashboard';
 import CampaignDashboard from './components/views/CampaignDashboard';
 import CharacterDetail from './components/views/CharacterDetail';
 import DatabaseSetup from './components/views/DatabaseSetup';
+import AllCharactersView from './components/views/AllCharactersView';
 import SettingsModal from './components/modals/SettingsModal';
 import PasswordModal from './components/modals/PasswordModal';
 import { Icons } from './components/ui/Icons';
@@ -20,7 +21,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   
   // 네비게이션 상태
-  const [currentView, setCurrentView] = useState<'HOME' | 'CAMPAIGN'>('HOME');
+  const [currentView, setCurrentView] = useState<'HOME' | 'CAMPAIGN' | 'ALL_CHARACTERS'>('HOME');
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [activeCharacterId, setActiveCharacterId] = useState<string | null>(null); 
   const [isCreatingCharacter, setIsCreatingCharacter] = useState(false);
@@ -400,6 +401,7 @@ const App: React.FC = () => {
     ? data.campaigns.find(c => c.id === activeCampaignId) 
     : null;
     
+  // activeCampaign이 있으면 그것만, 없으면 빈 배열 (하지만 CharacterDetail에서 activeCampaignId가 필수여서 보통 activeCampaignId를 참조)
   const campaignCharacters = activeCampaignId 
     ? data.characters.filter(c => c.campaignId === activeCampaignId)
     : [];
@@ -408,6 +410,7 @@ const App: React.FC = () => {
     ? data.characters.find(c => c.id === activeCharacterId)
     : null;
 
+  // activeCampaign이 없을 때 (All View 등)에서 테마를 정할 필요가 있다면 기본 테마 사용
   const activeTheme = activeCampaign?.theme ? THEMES[activeCampaign.theme] : THEMES[THEME_KEYS.ADVENTURE];
 
   return (
@@ -428,6 +431,26 @@ const App: React.FC = () => {
           onOpenSettings={() => {
             setSettingsStartTab('GLOBAL');
             setIsSettingsOpen(true);
+          }}
+          onOpenAllCharacters={() => setCurrentView('ALL_CHARACTERS')}
+        />
+      )}
+
+      {currentView === 'ALL_CHARACTERS' && (
+        <AllCharactersView
+          campaigns={data.campaigns}
+          characters={data.characters}
+          onBack={goHome}
+          onSelectCharacter={(id) => {
+             // Find campaign for this char
+             const char = data.characters.find(c => c.id === id);
+             if (char) {
+               setActiveCampaignId(char.campaignId);
+               setActiveCharacterId(id);
+               // We stay in ALL_CHARACTERS view logically in app state, but we render Detail modal on top.
+               // Or better: switch context so Detail works properly.
+               // CharacterDetail requires an activeCampaign prop.
+             }
           }}
         />
       )}
@@ -454,10 +477,14 @@ const App: React.FC = () => {
         />
       )}
 
-      {(activeCharacterId || isCreatingCharacter) && activeCampaign && (
+      {/* Detail Modal Layer */}
+      {(activeCharacterId || isCreatingCharacter) && (
         <CharacterDetail 
           character={activeCharacter || null}
-          campaign={activeCampaign}
+          // Fallback to finding campaign if activeCampaign is null (e.g. from All View)
+          campaign={activeCampaign || data.campaigns.find(c => c.id === activeCharacter?.campaignId)!}
+          allCharacters={data.characters} 
+          allCampaigns={data.campaigns} // Pass all campaigns for tag resolution
           isEditingNew={isCreatingCharacter}
           onSave={saveCharacter}
           onDelete={confirmDeleteCharacter}

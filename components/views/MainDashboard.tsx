@@ -7,17 +7,33 @@ interface MainDashboardProps {
   campaigns: Campaign[];
   onSelectCampaign: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenAllCharacters: () => void; // New Prop
 }
 
-const MainDashboard: React.FC<MainDashboardProps> = ({ campaigns, onSelectCampaign, onOpenSettings }) => {
+const MainDashboard: React.FC<MainDashboardProps> = ({ campaigns, onSelectCampaign, onOpenSettings, onOpenAllCharacters }) => {
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 md:p-12 relative custom-scrollbar">
       
       {/* Header - Logo Only Area */}
       <header className="flex flex-col items-center justify-center mb-8 md:mb-16 relative z-10 animate-in fade-in slide-in-from-top-4 duration-700 mt-8 md:mt-16">
         
-        {/* Settings Button (Top Right) */}
-        <div className="absolute right-0 top-0">
+        {/* Buttons (Top Right) */}
+        <div className="absolute right-0 top-0 flex items-center gap-2">
+          {/* All Characters Button */}
+          <button
+            onClick={onOpenAllCharacters}
+            className="group flex items-center p-2 md:p-3 text-stone-500 hover:text-emerald-500 bg-stone-900/50 hover:bg-stone-800 border border-stone-800 hover:border-emerald-900/50 rounded-full transition-all duration-500 backdrop-blur-md shadow-lg"
+            title="전체 캐릭터 열람"
+          >
+            <div className="max-w-0 group-hover:max-w-[120px] overflow-hidden transition-all duration-500 ease-out">
+              <span className="text-xs font-bold whitespace-nowrap pl-1 pr-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75 tracking-wider font-mono text-emerald-500">
+                ALL ARCHIVES
+              </span>
+            </div>
+            <Icons.Library size={20} />
+          </button>
+
+          {/* Settings Button */}
           <button
             onClick={onOpenSettings}
             className="group flex items-center p-2 md:p-3 text-stone-500 hover:text-amber-500 bg-stone-900/50 hover:bg-stone-800 border border-stone-800 hover:border-amber-900/50 rounded-full transition-all duration-500 backdrop-blur-md shadow-lg"
