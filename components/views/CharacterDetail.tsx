@@ -389,19 +389,26 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   }, [isTagMenuOpen]);
 
   // Group tags by campaign for the dropdown
-  // Returns: Record<CampaignName, TagItem[]>
+  // IMPORTANT: This now includes formData (current edits) to provide a "live" list.
+  // If a tag is removed from formData and it was the last instance, it will disappear from groupedTags immediately.
   const groupedTags: Record<string, TagItem[]> = useMemo(() => {
     const tagsByCampaign: Record<string, Set<string>> = {};
     const campaignMap = new Map(allCampaigns.map(c => [c.id, c.name]));
 
-    // 1. Collect all tags (storing them as JSON strings to ensure uniqueness of objects)
-    allCharacters.forEach(c => {
+    // Construct the "Effective" character list:
+    // All characters EXCEPT the one currently being edited (old version), PLUS the current formData (new version).
+    const effectiveCharacters = allCharacters.filter(c => c.id !== formData.id);
+    effectiveCharacters.push(formData);
+
+    // 1. Collect all tags
+    effectiveCharacters.forEach(c => {
       const campName = campaignMap.get(c.campaignId) || 'Unknown Campaign';
       if (!tagsByCampaign[campName]) tagsByCampaign[campName] = new Set();
 
       const processTag = (name: string, rank?: string) => {
+        if (!name || !name.trim()) return; // Filter empty tags
         // Store as stringified object to handle uniqueness
-        tagsByCampaign[campName].add(JSON.stringify({ name, rank: rank || '' }));
+        tagsByCampaign[campName].add(JSON.stringify({ name: name.trim(), rank: rank ? rank.trim() : '' }));
       };
 
       c.affiliations?.forEach(a => processTag(a.name, a.rank));
@@ -443,7 +450,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       Universal: universalTagNames,
       ...campaignTags
     };
-  }, [allCharacters, allCampaigns]);
+  }, [allCharacters, allCampaigns, formData.id, formData.affiliations, formData.secretProfile?.affiliations, formData.campaignId]);
 
   // Check if any tags exist
   const hasExistingTags = useMemo(() => {
