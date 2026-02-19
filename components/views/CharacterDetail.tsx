@@ -1373,12 +1373,68 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                           <option value="REGULAR">일반 텍스트/이미지</option>
                                           <option value="COMBAT">전투/스탯 데이터</option>
                                        </select>
-                                       <RichTextEditor 
-                                          value={file.content} 
-                                          onChange={v => updateExtraFile(file.id, 'content', v)} 
-                                          className="flex-1 min-h-[150px]"
-                                          placeholder="내용을 입력하세요..."
-                                       />
+                                       
+                                       {file.fileType === 'COMBAT' ? (
+                                          <div className="mt-4 space-y-4">
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                  {(file.combatStats || []).map((stat, idx) => (
+                                                      <div key={idx} className="flex items-center gap-3 bg-black/40 p-3 rounded-xl border border-stone-800 animate-in fade-in slide-in-from-bottom-1">
+                                                          <input
+                                                              className={`w-20 bg-transparent border-b ${tc.border} text-xs font-bold text-center focus:border-amber-500 outline-none pb-1`}
+                                                              value={stat.name}
+                                                              onChange={(e) => {
+                                                                  const newStats = [...(file.combatStats || [])];
+                                                                  newStats[idx] = { ...stat, name: e.target.value };
+                                                                  updateExtraFile(file.id, 'combatStats', newStats);
+                                                              }}
+                                                              placeholder="스탯명"
+                                                          />
+                                                          <div className="flex-1 flex flex-col gap-1">
+                                                              <input
+                                                                  type="range" min="1" max="5" step="1"
+                                                                  value={stat.value}
+                                                                  onChange={(e) => {
+                                                                      const newStats = [...(file.combatStats || [])];
+                                                                      newStats[idx] = { ...stat, value: parseInt(e.target.value) };
+                                                                      updateExtraFile(file.id, 'combatStats', newStats);
+                                                                  }}
+                                                                  className="w-full h-1.5 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-amber-600"
+                                                              />
+                                                              <div className="flex justify-between text-[8px] text-stone-500 font-mono px-1">
+                                                                  <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                                                              </div>
+                                                          </div>
+                                                          <span className={`text-sm font-black w-6 text-center ${tc.textAccent}`}>{stat.value}</span>
+                                                          <button 
+                                                              onClick={() => {
+                                                                  const newStats = (file.combatStats || []).filter((_, i) => i !== idx);
+                                                                  updateExtraFile(file.id, 'combatStats', newStats);
+                                                              }}
+                                                              className="p-1 text-stone-600 hover:text-red-500"
+                                                          >
+                                                              <Icons.Close size={14} />
+                                                          </button>
+                                                      </div>
+                                                  ))}
+                                              </div>
+                                              <button
+                                                  onClick={() => {
+                                                      const newStats = [...(file.combatStats || []), { name: 'New Stat', value: 1 }];
+                                                      updateExtraFile(file.id, 'combatStats', newStats);
+                                                  }}
+                                                  className="w-full py-2 border border-dashed border-stone-700 rounded-lg text-xs font-bold text-stone-500 hover:text-stone-300 hover:border-stone-500 transition-colors flex items-center justify-center gap-2"
+                                              >
+                                                  <Icons.Plus size={14} /> 스탯 항목 추가
+                                              </button>
+                                          </div>
+                                       ) : (
+                                          <RichTextEditor 
+                                              value={file.content} 
+                                              onChange={v => updateExtraFile(file.id, 'content', v)} 
+                                              className="flex-1 min-h-[150px]"
+                                              placeholder="내용을 입력하세요..."
+                                          />
+                                       )}
                                     </div>
                                  ) : (
                                     <div className="prose prose-invert prose-sm max-w-none">
