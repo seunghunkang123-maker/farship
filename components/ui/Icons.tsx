@@ -26,7 +26,9 @@ import {
   Strikethrough,
   Eye,
   EyeOff,
-  Tag
+  Tag,
+  Bold,
+  Italic
 } from 'lucide-react';
 
 export const Icons = {
@@ -56,5 +58,7 @@ export const Icons = {
   Strikethrough,
   Eye,
   EyeOff,
-  Tag
+  Tag,
+  Bold,
+  Italic
 };

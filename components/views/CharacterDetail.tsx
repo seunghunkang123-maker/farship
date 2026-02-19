@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation, CombatStat } from '../../types';
 import { Icons } from '../ui/Icons';
@@ -30,6 +31,98 @@ const COMMENT_FONTS = {
   'MONO': { label: '코딩 (Mono)', class: 'font-mono' },
   'HAND': { label: '손글씨 (Hand)', class: 'font-hand' },
   'FANTASY': { label: '판타지 (Fantasy)', class: 'font-fantasy' }
+};
+
+// --- Helper Components ---
+
+// 1. Simple Markdown Render (Display)
+// Supports **Bold** and *Italic*
+const SimpleMarkdown: React.FC<{ text: string; className?: string }> = ({ text, className = "" }) => {
+  if (!text) return <span className="opacity-50">-</span>;
+
+  // Split by newlines first to preserve line breaks
+  return (
+    <div className={className}>
+      {text.split('\n').map((line, i) => (
+        <div key={i} className="min-h-[1.5em] break-words">
+          {line ? line.split(/(\*\*.*?\*\*|\*.*?\*)/g).map((part, j) => {
+            if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+              return <strong key={j} className="font-black text-amber-500/90">{part.slice(2, -2)}</strong>;
+            }
+            if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+              return <em key={j} className="text-white/80">{part.slice(1, -1)}</em>;
+            }
+            return <span key={j}>{part}</span>;
+          }) : <br/>}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// 2. Rich Text Editor (Input)
+// Provides toolbar for Bold/Italic and a larger textarea
+interface RichTextEditorProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+  minHeight?: string;
+}
+
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeholder, className, minHeight = "h-64" }) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertFormat = (type: 'bold' | 'italic') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = value.substring(start, end);
+    const symbol = type === 'bold' ? '**' : '*';
+    
+    const newVal = value.substring(0, start) + symbol + selectedText + symbol + value.substring(end);
+    
+    onChange(newVal);
+
+    // Restore focus and cursor
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + symbol.length, end + symbol.length);
+    }, 0);
+  };
+
+  return (
+    <div className={`flex flex-col border border-stone-700 rounded-lg overflow-hidden bg-black/20 focus-within:border-amber-500/50 transition-colors ${className}`}>
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 p-2 bg-stone-900 border-b border-stone-800">
+        <button 
+          onClick={() => insertFormat('bold')} 
+          className="p-1.5 text-stone-400 hover:text-amber-400 hover:bg-white/5 rounded transition-colors" 
+          title="굵게 (**Text**)"
+        >
+          <Icons.Bold size={16} />
+        </button>
+        <button 
+          onClick={() => insertFormat('italic')} 
+          className="p-1.5 text-stone-400 hover:text-amber-400 hover:bg-white/5 rounded transition-colors" 
+          title="기울임 (*Text*)"
+        >
+          <Icons.Italic size={16} />
+        </button>
+      </div>
+      
+      {/* Textarea */}
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full ${minHeight} bg-transparent p-4 text-sm leading-relaxed outline-none resize-y placeholder:opacity-20 font-sans custom-scrollbar`}
+        placeholder={placeholder}
+      />
+    </div>
+  );
 };
 
 // --- Radar Chart Component ---
@@ -135,21 +228,21 @@ interface EditableFieldProps {
   isSecretField?: boolean;
   themeClasses: any;
   highlight?: boolean;
+  minHeight?: string;
 }
 
 const EditableField: React.FC<EditableFieldProps> = ({
-  label, value, onChange, isEditing, type = 'text', options = [], placeholder = '', isSecretField = false, themeClasses, highlight = false
+  label, value, onChange, isEditing, type = 'text', options = [], placeholder = '', isSecretField = false, themeClasses, highlight = false, minHeight
 }) => {
   const [isRevealed, setIsRevealed] = useState(false);
   
   const displayClass = highlight ? `${themeClasses.textAccent} font-bold` : themeClasses.textMain;
-  const inputBorderClass = highlight 
-    ? `border-transparent ring-1 ring-opacity-50 ${themeClasses.border.replace('border-', 'ring-')}` 
-    : themeClasses.border;
 
   if (!isEditing) {
     if (type === 'toggle') return null;
     let displayValue = value || '-';
+    
+    // Secret Field Masking
     if (isSecretField && value && !isRevealed) {
          return (
            <div className="mb-4 group">
@@ -160,6 +253,20 @@ const EditableField: React.FC<EditableFieldProps> = ({
            </div>
          );
     }
+
+    // Markdown Display for Textarea types
+    if (type === 'textarea') {
+      return (
+        <div className="mb-4 group">
+          <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block ${themeClasses.textSub}`}>{label}</label>
+          <div className={`text-sm md:text-base p-3 rounded-lg min-h-[2rem] ${displayClass} border border-transparent`}>
+            <SimpleMarkdown text={displayValue} />
+          </div>
+        </div>
+      );
+    }
+
+    // Regular Text Display
     return (
       <div className="mb-4 group">
         <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block ${themeClasses.textSub}`}>{label}</label>
@@ -170,15 +277,28 @@ const EditableField: React.FC<EditableFieldProps> = ({
     );
   }
   
+  // EDIT MODE
   return (
     <div className="mb-4">
       <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block flex items-center gap-2 ${highlight ? themeClasses.textAccent : themeClasses.textSub}`}>
         {label} 
         {highlight && <span className={`text-[9px] px-1.5 py-0.5 rounded border ${themeClasses.border} bg-black/30 tracking-normal`}>SECURE</span>}
       </label>
+      
       {type === 'text' && <input type="text" value={value || ''} onChange={(e) => onChange(e.target.value)} className={`w-full bg-black/40 border rounded-lg p-2.5 focus:border-opacity-100 focus:outline-none placeholder:opacity-20 text-sm ${themeClasses.textMain} ${highlight ? `border-current ring-1 ring-white/10 ${themeClasses.textAccent}` : themeClasses.border}`} placeholder={placeholder}/>}
-      {type === 'textarea' && <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} className={`w-full h-32 bg-black/40 border rounded-lg p-3 focus:border-opacity-100 focus:outline-none resize-none placeholder:opacity-20 text-sm leading-relaxed ${themeClasses.textMain} ${highlight ? `border-current ring-1 ring-white/10 ${themeClasses.textAccent}` : themeClasses.border}`} placeholder={placeholder}/>}
+      
+      {type === 'textarea' && (
+        <RichTextEditor 
+          value={value || ''} 
+          onChange={onChange} 
+          placeholder={placeholder}
+          minHeight={minHeight || "min-h-[300px]"} 
+          className={highlight ? `border-current ring-1 ring-white/10 ${themeClasses.textAccent}` : ""}
+        />
+      )}
+      
       {type === 'select' && <select value={value} onChange={(e) => onChange(e.target.value)} className={`w-full bg-black/40 border ${themeClasses.border} rounded-lg p-2.5 focus:border-opacity-100 focus:outline-none text-sm ${themeClasses.textMain}`}>{options.map((opt) => <option key={opt.value} value={opt.value} className="bg-stone-900 text-stone-200">{opt.label}</option>)}</select>}
+      
       {type === 'toggle' && <div className="flex gap-2 p-1 bg-black/20 rounded-lg w-fit"><button onClick={() => onChange(false)} className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${!value ? 'bg-emerald-600 text-white shadow-lg' : 'text-stone-500'}`}>PC</button><button onClick={() => onChange(true)} className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${value ? 'bg-amber-600 text-white shadow-lg' : 'text-stone-500'}`}>NPC</button></div>}
     </div>
   );
@@ -409,6 +529,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             return a;
         }).map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
         updateSecretField('affiliations', newList);
+    } else {
+      const currentList = formData.affiliations || [];
+      setFormData(prev => ({ ...prev, affiliations: currentList.map((a, i) => i === index ? {...a, isHidden: !a.isHidden} : a) }));
     }
   };
 
@@ -746,7 +869,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                   value={resolveValue('summary', 'summary')} 
                   onChange={v => editLayer === 'SECRET' ? updateSecretField('summary', v) : setFormData(p => ({...p, summary: v}))} 
                   isEditing={isEditing} 
-                  type="textarea"
+                  type="textarea" 
+                  minHeight="h-32" 
                   themeClasses={tc} 
                   highlight={editLayer === 'SECRET'} 
                 />
@@ -966,7 +1090,16 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
             {activeTab === 'BIO' && (
               <div className="max-w-3xl animate-in slide-in-from-bottom-2 duration-300 pb-20 md:pb-0">
-                <EditableField label="상세 설정 및 전기 (BIOGRAPHY)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} type="textarea" isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                <EditableField 
+                  label="상세 설정 및 전기 (BIOGRAPHY)" 
+                  value={resolveValue('description', 'description')} 
+                  onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} 
+                  type="textarea" 
+                  minHeight="min-h-[600px]" 
+                  isEditing={isEditing} 
+                  themeClasses={tc} 
+                  highlight={editLayer === 'SECRET'} 
+                />
               </div>
             )}
             
@@ -1045,9 +1178,14 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                       </div>
                     ) : (
                       isEditing ? (
-                        <textarea value={file.content} onChange={e => updateExtraFile(file.id, 'content', e.target.value)} className="w-full h-40 bg-black/40 border border-stone-800 rounded-xl p-4 text-sm focus:border-amber-500 outline-none transition-colors" placeholder="Enter detailed information..."/>
+                        <RichTextEditor 
+                          value={file.content} 
+                          onChange={e => updateExtraFile(file.id, 'content', e)} 
+                          minHeight="min-h-[500px]" 
+                          placeholder="Enter detailed information..."
+                        />
                       ) : (
-                        <p className="text-sm md:text-base opacity-80 whitespace-pre-wrap leading-relaxed px-1 font-serif">{file.content}</p>
+                        <SimpleMarkdown text={file.content} className="text-sm md:text-base opacity-80 whitespace-pre-wrap leading-relaxed px-1 font-serif" />
                       )
                     )}
                   </div>
