@@ -1273,6 +1273,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                        </div>
                     )}
                  </div>
+
+                 <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
               </div>
             )}
 
@@ -1285,10 +1287,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     <EditableField label="키 (HEIGHT)" value={resolveValue('height', 'height')} onChange={v => editLayer === 'SECRET' ? updateSecretField('height', v) : setFormData(p => ({...p, height: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
                     <EditableField label="몸무게 (WEIGHT)" value={resolveValue('weight', 'weight')} onChange={v => editLayer === 'SECRET' ? updateSecretField('weight', v) : setFormData(p => ({...p, weight: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
                  </div>
-                 <div className="grid md:grid-cols-2 gap-6">
-                    <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
-                    <EditableField label="상세 설명 (DESCRIPTION)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
-                 </div>
+                 <EditableField label="상세 설명 (DESCRIPTION)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
               </div>
             )}
 
@@ -1479,23 +1478,27 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                            {/* Style Selector */}
                            <div className="relative group">
                               <button className="p-1.5 rounded hover:bg-white/5 text-stone-400"><Icons.Palette size={16} /></button>
-                              <div className="absolute top-full left-0 mt-2 bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl z-50 hidden group-hover:block w-40">
-                                 {Object.entries(COMMENT_STYLES).map(([key, style]) => (
-                                    <button key={key} onClick={() => setCommentStyle(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentStyle === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
-                                       {style.label}
-                                    </button>
-                                 ))}
+                              <div className="absolute top-full left-0 pt-2 hidden group-hover:block z-50 w-40">
+                                 <div className="bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl">
+                                     {Object.entries(COMMENT_STYLES).map(([key, style]) => (
+                                        <button key={key} onClick={() => setCommentStyle(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentStyle === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
+                                           {style.label}
+                                        </button>
+                                     ))}
+                                 </div>
                               </div>
                            </div>
                            {/* Font Selector */}
                            <div className="relative group">
                               <button className="p-1.5 rounded hover:bg-white/5 text-stone-400"><Icons.Bold size={16} /></button>
-                              <div className="absolute top-full left-0 mt-2 bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl z-50 hidden group-hover:block w-32">
-                                 {Object.entries(COMMENT_FONTS).map(([key, font]) => (
-                                    <button key={key} onClick={() => setCommentFont(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentFont === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
-                                       {font.label}
-                                    </button>
-                                 ))}
+                              <div className="absolute top-full left-0 pt-2 hidden group-hover:block z-50 w-32">
+                                 <div className="bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl">
+                                     {Object.entries(COMMENT_FONTS).map(([key, font]) => (
+                                        <button key={key} onClick={() => setCommentFont(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentFont === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
+                                           {font.label}
+                                        </button>
+                                     ))}
+                                 </div>
                               </div>
                            </div>
                         </div>
