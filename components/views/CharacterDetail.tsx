@@ -4,6 +4,8 @@ import { Icons } from '../ui/Icons';
 import { uploadImage } from '../../services/upload';
 import { THEMES, THEME_KEYS } from '../../constants';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
+import TagLibraryModal from '../modals/TagLibraryModal';
+import { TagItem } from '../../types';
 
 // --- Colors Constant ---
 const MEMBER_COLORS: Record<string, string> = {
@@ -319,10 +321,7 @@ interface CharacterDetailProps {
   onToggleNameReveal?: (id: string, state: boolean) => void;
 }
 
-interface TagItem {
-  name: string;
-  rank?: string;
-}
+
 
 const CharacterDetail: React.FC<CharacterDetailProps> = ({ 
   character, campaign, allCharacters = [], allCampaigns = [], onSave, onDelete, onClose, isEditingNew = false,
@@ -347,10 +346,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
-  // Tag Menu State
-  const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
-  const tagMenuRef = useRef<HTMLDivElement>(null);
-
+  // Tag Library State
+  const [isTagLibraryOpen, setIsTagLibraryOpen] = useState(false);
+  
   // Comment Editing
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 
@@ -374,21 +372,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     updatedAt: Date.now(), alias: '', isNameBlurred: false, affiliations: []
   });
 
-  // Handle outside click for Tag Menu
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (tagMenuRef.current && !tagMenuRef.current.contains(event.target as Node)) {
-        setIsTagMenuOpen(false);
-      }
-    };
 
-    if (isTagMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isTagMenuOpen]);
 
   // Group tags by campaign for the dropdown
   // IMPORTANT: This now includes formData (current edits) to provide a "live" list.
@@ -1212,38 +1196,20 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                              )})}
                           </div>
                           <div className="flex flex-col md:flex-row gap-2 mt-4 bg-stone-900/50 p-2 rounded-xl border border-stone-800/50">
-                             <div className="relative flex-1" ref={tagMenuRef}>
+                             <div className="relative flex-1 flex items-center gap-2">
+                                <button
+                                  onClick={() => setIsTagLibraryOpen(true)}
+                                  className={`p-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-stone-200 transition-colors border ${tc.border}`}
+                                  title="태그 라이브러리 열기"
+                                >
+                                  <Icons.Library size={16} />
+                                </button>
                                 <input 
                                    value={newAffiliationName} 
                                    onChange={e => setNewAffiliationName(e.target.value)} 
-                                   onFocus={() => setIsTagMenuOpen(true)}
-                                   className={`w-full bg-transparent border-b ${tc.border} focus:border-amber-500 outline-none text-xs py-1 text-stone-300 placeholder:text-stone-600`}
-                                   placeholder="태그 입력 또는 선택..."
+                                   className={`flex-1 bg-transparent border-b ${tc.border} focus:border-amber-500 outline-none text-xs py-1 text-stone-300 placeholder:text-stone-600`}
+                                   placeholder="태그 직접 입력..."
                                 />
-                                {isTagMenuOpen && hasExistingTags && (
-                                   <div className="absolute top-full left-0 w-full max-h-48 overflow-y-auto bg-stone-900 border border-stone-700 rounded-b-lg shadow-xl z-50 custom-scrollbar">
-                                      {Object.entries(groupedTags).map(([group, tags]) => (
-                                         <div key={group}>
-                                            <div className="px-2 py-1 bg-stone-800 text-[10px] font-bold text-stone-500 uppercase">{group}</div>
-                                            {tags.map((tag, idx) => (
-                                               <button 
-                                                 key={`${group}-${idx}`}
-                                                 onClick={() => {
-                                                    setNewAffiliationName(tag.name);
-                                                    if(tag.rank) { setNewAffiliationRank(tag.rank); setHasRank(true); }
-                                                    else { setNewAffiliationRank(''); setHasRank(false); }
-                                                    setIsTagMenuOpen(false);
-                                                 }}
-                                                 className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:bg-amber-900/30 hover:text-amber-400 flex justify-between"
-                                               >
-                                                  <span>{tag.name}</span>
-                                                  {tag.rank && <span className="opacity-50 text-[10px]">{tag.rank}</span>}
-                                               </button>
-                                            ))}
-                                         </div>
-                                      ))}
-                                   </div>
-                                )}
                              </div>
                              
                              <div className="flex items-center gap-2">
@@ -1597,6 +1563,26 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           </div>
         </div>
       </div>
+      <TagLibraryModal 
+        isOpen={isTagLibraryOpen}
+        onClose={() => setIsTagLibraryOpen(false)}
+        groupedTags={groupedTags}
+        existingTags={(formData.affiliations || []).map(a => a.name)}
+        onAddTag={(tag) => {
+          const newAff: CharacterAffiliation = {
+            id: crypto.randomUUID(),
+            name: tag.name,
+            rank: tag.rank,
+            isStrikethrough: false,
+            isHidden: false
+          };
+          setFormData(prev => ({
+             ...prev,
+             affiliations: [...(prev.affiliations || []), newAff]
+          }));
+        }}
+        themeColor={tc.textAccent}
+      />
     </div>
   );
 };

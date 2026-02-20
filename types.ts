@@ -155,6 +155,12 @@ export const BOB_PLAYBOOKS = [
   '신병 (Rookie)',
 ];
 
+export interface TagItem {
+  name: string;
+  rank?: string;
+  count?: number;
+}
+
 export interface ThemeConfig {
   name: string;
   classes: {

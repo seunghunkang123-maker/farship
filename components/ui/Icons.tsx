@@ -29,7 +29,9 @@ import {
   Tag,
   Bold,
   Italic,
-  Library
+  Library,
+  Tags,
+  Check
 } from 'lucide-react';
 
 export const Icons = {
@@ -62,5 +64,7 @@ export const Icons = {
   Tag,
   Bold,
   Italic,
-  Library
+  Library,
+  Tags,
+  Check
 };
