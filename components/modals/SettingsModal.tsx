@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Campaign, SystemType } from '../../types';
 import { Icons } from '../ui/Icons';
 import { uploadImage } from '../../services/upload';
+import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -141,7 +142,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                        className={`w-full text-left px-3 py-2 rounded text-sm truncate flex items-center gap-2 transition-colors ${selectedCampaignId === c.id ? 'bg-stone-800 text-amber-400 font-bold border border-stone-700' : 'text-stone-500 hover:bg-stone-800/50 hover:text-stone-300'}`}
                      >
                        {c.logoUrl ? (
-                         <img src={c.logoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-600" />
+                         <img src={getOptimizedImageUrl(c.logoUrl, 100)} className="w-6 h-6 rounded-full object-cover border border-stone-600" />
                        ) : <div className="w-6 h-6 rounded-full bg-stone-800 border border-stone-700" />}
                        {c.name}
                      </button>
@@ -156,7 +157,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-start gap-4">
                         <div className="relative w-24 h-24 rounded-full bg-stone-800 overflow-hidden border border-stone-600 flex-shrink-0 group shadow-2xl">
                            {selectedCampaign.logoUrl ? (
-                             <img src={selectedCampaign.logoUrl} className="w-full h-full object-cover" />
+                             <img src={getOptimizedImageUrl(selectedCampaign.logoUrl, 300)} className="w-full h-full object-cover" />
                            ) : <Icons.Image className="w-full h-full p-6 text-stone-700" />}
                            <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
                              <Icons.Upload className="text-amber-400" />

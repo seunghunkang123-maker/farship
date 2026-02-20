@@ -360,6 +360,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   const [commentStyle, setCommentStyle] = useState<string>('NOTE');
   const [commentFont, setCommentFont] = useState<string>('SANS');
   const [commentDate, setCommentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [activeDropdown, setActiveDropdown] = useState<'STYLE' | 'FONT' | null>(null);
   
   const [isGuestPlayer, setIsGuestPlayer] = useState(false);
 
@@ -1488,30 +1489,60 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                      <div className="flex items-center justify-between">
                         <div className="flex gap-2">
                            {/* Style Selector */}
-                           <div className="relative group">
-                              <button className="p-1.5 rounded hover:bg-white/5 text-stone-400"><Icons.Palette size={16} /></button>
-                              <div className="absolute top-full left-0 pt-2 hidden group-hover:block z-50 w-40">
-                                 <div className="bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl">
-                                     {Object.entries(COMMENT_STYLES).map(([key, style]) => (
-                                        <button key={key} onClick={() => setCommentStyle(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentStyle === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
-                                           {style.label}
-                                        </button>
-                                     ))}
+                           <div 
+                              className="relative"
+                              onMouseEnter={() => setActiveDropdown('STYLE')}
+                              onMouseLeave={() => setActiveDropdown(null)}
+                           >
+                              <button className={`p-1.5 rounded hover:bg-white/5 transition-colors ${activeDropdown === 'STYLE' ? 'text-amber-500 bg-white/10' : 'text-stone-400'}`}>
+                                 <Icons.Palette size={16} />
+                              </button>
+                              {activeDropdown === 'STYLE' && (
+                                 <div className="absolute top-full left-0 mt-1 z-[100] w-40 animate-in fade-in slide-in-from-top-1 duration-200">
+                                    <div className="bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-2xl ring-1 ring-black/50">
+                                        {Object.entries(COMMENT_STYLES).map(([key, style]) => (
+                                           <button 
+                                             key={key} 
+                                             onClick={() => {
+                                                setCommentStyle(key);
+                                                setActiveDropdown(null);
+                                             }} 
+                                             className={`w-full text-left text-xs p-2 rounded hover:bg-white/10 transition-colors ${commentStyle === key ? 'text-amber-500 font-bold bg-white/5' : 'text-stone-400'}`}
+                                           >
+                                              {style.label}
+                                           </button>
+                                        ))}
+                                    </div>
                                  </div>
-                              </div>
+                              )}
                            </div>
                            {/* Font Selector */}
-                           <div className="relative group">
-                              <button className="p-1.5 rounded hover:bg-white/5 text-stone-400"><Icons.Bold size={16} /></button>
-                              <div className="absolute top-full left-0 pt-2 hidden group-hover:block z-50 w-32">
-                                 <div className="bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-xl">
-                                     {Object.entries(COMMENT_FONTS).map(([key, font]) => (
-                                        <button key={key} onClick={() => setCommentFont(key)} className={`w-full text-left text-xs p-1.5 rounded hover:bg-white/10 ${commentFont === key ? 'text-amber-500 font-bold' : 'text-stone-400'}`}>
-                                           {font.label}
-                                        </button>
-                                     ))}
+                           <div 
+                              className="relative"
+                              onMouseEnter={() => setActiveDropdown('FONT')}
+                              onMouseLeave={() => setActiveDropdown(null)}
+                           >
+                              <button className={`p-1.5 rounded hover:bg-white/5 transition-colors ${activeDropdown === 'FONT' ? 'text-amber-500 bg-white/10' : 'text-stone-400'}`}>
+                                 <Icons.Bold size={16} />
+                              </button>
+                              {activeDropdown === 'FONT' && (
+                                 <div className="absolute top-full left-0 mt-1 z-[100] w-32 animate-in fade-in slide-in-from-top-1 duration-200">
+                                    <div className="bg-stone-900 border border-stone-700 rounded-lg p-2 shadow-2xl ring-1 ring-black/50">
+                                        {Object.entries(COMMENT_FONTS).map(([key, font]) => (
+                                           <button 
+                                             key={key} 
+                                             onClick={() => {
+                                                setCommentFont(key);
+                                                setActiveDropdown(null);
+                                             }} 
+                                             className={`w-full text-left text-xs p-2 rounded hover:bg-white/10 transition-colors ${commentFont === key ? 'text-amber-500 font-bold bg-white/5' : 'text-stone-400'}`}
+                                           >
+                                              {font.label}
+                                           </button>
+                                        ))}
+                                    </div>
                                  </div>
-                              </div>
+                              )}
                            </div>
                         </div>
                         <button 
