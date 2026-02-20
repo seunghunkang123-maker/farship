@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Campaign, Character } from '../../types';
 import { Icons } from '../ui/Icons';
 import { THEMES, THEME_KEYS } from '../../constants';
+import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
 interface AllCharactersViewProps {
   campaigns: Campaign[];
@@ -76,7 +77,7 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
         <div className="aspect-square bg-black/20 relative overflow-hidden">
           {displayImg ? (
             <img 
-              src={displayImg} 
+              src={getOptimizedImageUrl(displayImg, 300)} 
               alt={char.name} 
               className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${char.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}
             />
@@ -173,7 +174,7 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
               <div key={campaign.id} className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="flex items-center gap-4 mb-6 border-b border-stone-800 pb-2">
                    {campaign.logoUrl ? (
-                     <img src={campaign.logoUrl} className="w-10 h-10 rounded-full object-cover border border-stone-700" alt={campaign.name} />
+                     <img src={getOptimizedImageUrl(campaign.logoUrl, 100)} className="w-10 h-10 rounded-full object-cover border border-stone-700" alt={campaign.name} />
                    ) : (
                      <div className="w-10 h-10 rounded-full bg-stone-800 flex items-center justify-center text-stone-500"><Icons.Folder size={20}/></div>
                    )}

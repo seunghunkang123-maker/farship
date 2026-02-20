@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Campaign, Character, DND_CLASSES, SystemType, CORE_MEMBERS } from '../../types';
 import { Icons } from '../ui/Icons';
 import { THEMES, THEME_KEYS } from '../../constants';
+import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
 interface CampaignDashboardProps {
   campaign: Campaign;
@@ -163,7 +164,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
 
           <div className="flex items-center gap-3 overflow-hidden">
              {campaign.logoUrl && (
-               <img src={campaign.logoUrl} alt="Logo" className={`w-8 h-8 md:w-10 md:h-10 rounded-full object-cover border flex-shrink-0 ${theme.classes.border}`} />
+               <img src={getOptimizedImageUrl(campaign.logoUrl, 100)} alt="Logo" className={`w-8 h-8 md:w-10 md:h-10 rounded-full object-cover border flex-shrink-0 ${theme.classes.border}`} />
              )}
              <div className="min-w-0">
                <h1 className={`text-lg md:text-xl font-bold leading-tight truncate ${theme.classes.textMain}`}>{campaign.name}</h1>
@@ -356,7 +357,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                       {/* Portrait (Small) */}
                       <div className="w-12 h-12 md:w-14 md:h-14 rounded-full overflow-hidden shrink-0 border border-white/10 bg-black/20 relative">
                         {displayImg ? (
-                          <img src={displayImg} alt={nameToDisplay} className="w-full h-full object-cover" />
+                          <img src={getOptimizedImageUrl(displayImg, 100)} alt={nameToDisplay} className="w-full h-full object-cover" />
                         ) : (
                           <div className={`w-full h-full flex items-center justify-center ${cardSubTextClass}`}><Icons.User size={20} /></div>
                         )}
@@ -424,7 +425,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                   <div className="aspect-square bg-black/20 relative overflow-hidden">
                     {displayImg ? (
                       <img 
-                        src={displayImg} 
+                        src={getOptimizedImageUrl(displayImg, 300)} 
                         alt={nameToDisplay} 
                         className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${char.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}
                       />

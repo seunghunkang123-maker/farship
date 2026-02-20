@@ -3,6 +3,7 @@ import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile
 import { Icons } from '../ui/Icons';
 import { uploadImage } from '../../services/upload';
 import { THEMES, THEME_KEYS } from '../../constants';
+import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
 // --- Colors Constant ---
 const MEMBER_COLORS: Record<string, string> = {
@@ -956,7 +957,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           
           <div className={`relative w-full max-w-[320px] md:max-w-[512px] aspect-square mx-auto rounded-xl overflow-hidden mb-8 group border-2 shadow-2xl transition-all ${isSecretRevealed ? `border-current ${tc.textAccent} shadow-[0_0_30px_rgba(0,0,0,0.3)]` : 'border-stone-800'} bg-stone-900/50`}>
             {displayImageUrl ? (
-              <img src={displayImageUrl} alt={formData.name} className={`w-full h-full object-top transition-transform duration-1000 group-hover:scale-110 ${formData.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+              <img src={getOptimizedImageUrl(displayImageUrl, 800)} alt={formData.name} className={`w-full h-full object-top transition-transform duration-1000 group-hover:scale-110 ${formData.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
             ) : <div className={`w-full h-full flex items-center justify-center opacity-10 ${tc.textSub}`}><Icons.User size={100} strokeWidth={1} /></div>}
             
             {isEditing && (
@@ -1338,7 +1339,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                               <div className="w-full md:w-1/3 space-y-2">
                                  {file.imageUrl ? (
                                     <div className="relative group rounded-lg overflow-hidden bg-black aspect-video md:aspect-square">
-                                       <img src={file.imageUrl} className={`w-full h-full ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="File" />
+                                       <img src={getOptimizedImageUrl(file.imageUrl, 500)} className={`w-full h-full ${file.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} alt="File" />
                                        {isEditing && (
                                           <button onClick={() => updateExtraFile(file.id, 'imageUrl', '')} className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Icons.Close size={12} /></button>
                                        )}

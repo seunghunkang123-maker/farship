@@ -2,6 +2,7 @@
 import React from 'react';
 import { Campaign } from '../../types';
 import { Icons } from '../ui/Icons';
+import { getOptimizedImageUrl } from '../../utils/imageUtils';
 
 interface MainDashboardProps {
   campaigns: Campaign[];
@@ -100,7 +101,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ campaigns, onSelectCampai
                      <div className="w-full h-full rounded-full overflow-hidden bg-[#0c0a09] relative flex items-center justify-center">
                         {campaign.logoUrl ? (
                           <img 
-                            src={campaign.logoUrl} 
+                            src={getOptimizedImageUrl(campaign.logoUrl, 200)} 
                             alt={campaign.name} 
                             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-300 grayscale group-hover:grayscale-0" 
                           />
