@@ -1465,7 +1465,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'COMMENTS' && (
                <div className="space-y-6 max-w-2xl mx-auto">
                   {/* Write Area */}
-                  <div className={`p-4 rounded-xl border ${tc.bgPanel} ${tc.border} shadow-xl`}>
+                  <div className={`p-4 rounded-xl border ${tc.bgPanel} ${tc.border} shadow-xl transition-all duration-300 ${activeDropdown ? 'mb-40' : 'mb-0'}`}>
                      <div className="flex justify-between items-center mb-4">
                         <input 
                            value={commentName} 
@@ -1489,12 +1489,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                      <div className="flex items-center justify-between">
                         <div className="flex gap-2">
                            {/* Style Selector */}
-                           <div 
-                              className="relative"
-                              onMouseEnter={() => setActiveDropdown('STYLE')}
-                              onMouseLeave={() => setActiveDropdown(null)}
-                           >
-                              <button className={`p-1.5 rounded hover:bg-white/5 transition-colors ${activeDropdown === 'STYLE' ? 'text-amber-500 bg-white/10' : 'text-stone-400'}`}>
+                           <div className="relative">
+                              <button 
+                                 onClick={() => setActiveDropdown(activeDropdown === 'STYLE' ? null : 'STYLE')}
+                                 className={`p-1.5 rounded hover:bg-white/5 transition-colors ${activeDropdown === 'STYLE' ? `${tc.textAccent} bg-white/10` : tc.textSub}`}
+                                 title="클릭하여 스타일 선택 (고정)"
+                              >
                                  <Icons.Palette size={16} />
                               </button>
                               {activeDropdown === 'STYLE' && (
@@ -1507,7 +1507,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                                 setCommentStyle(key);
                                                 setActiveDropdown(null);
                                              }} 
-                                             className={`w-full text-left text-xs p-2 rounded hover:bg-white/10 transition-colors ${commentStyle === key ? 'text-amber-500 font-bold bg-white/5' : 'text-stone-400'}`}
+                                             className={`w-full text-left text-xs p-2 rounded hover:bg-white/10 transition-colors ${commentStyle === key ? `${tc.textAccent} font-bold bg-white/5` : tc.textSub}`}
                                            >
                                               {style.label}
                                            </button>
@@ -1517,12 +1517,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                               )}
                            </div>
                            {/* Font Selector */}
-                           <div 
-                              className="relative"
-                              onMouseEnter={() => setActiveDropdown('FONT')}
-                              onMouseLeave={() => setActiveDropdown(null)}
-                           >
-                              <button className={`p-1.5 rounded hover:bg-white/5 transition-colors ${activeDropdown === 'FONT' ? 'text-amber-500 bg-white/10' : 'text-stone-400'}`}>
+                           <div className="relative">
+                              <button 
+                                 onClick={() => setActiveDropdown(activeDropdown === 'FONT' ? null : 'FONT')}
+                                 className={`p-1.5 rounded hover:bg-white/5 transition-colors ${activeDropdown === 'FONT' ? `${tc.textAccent} bg-white/10` : tc.textSub}`}
+                                 title="클릭하여 폰트 선택 (고정)"
+                              >
                                  <Icons.Bold size={16} />
                               </button>
                               {activeDropdown === 'FONT' && (
@@ -1535,7 +1535,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                                 setCommentFont(key);
                                                 setActiveDropdown(null);
                                              }} 
-                                             className={`w-full text-left text-xs p-2 rounded hover:bg-white/10 transition-colors ${commentFont === key ? 'text-amber-500 font-bold bg-white/5' : 'text-stone-400'}`}
+                                             className={`w-full text-left text-xs p-2 rounded hover:bg-white/10 transition-colors ${commentFont === key ? `${tc.textAccent} font-bold bg-white/5` : tc.textSub}`}
                                            >
                                               {font.label}
                                            </button>
