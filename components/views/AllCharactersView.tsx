@@ -77,9 +77,9 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
         <div className="aspect-square bg-black/20 relative overflow-hidden">
           {displayImg ? (
             <img 
-              src={getOptimizedImageUrl(displayImg, 300)} 
+              src={getOptimizedImageUrl(displayImg, 600)} 
               alt={char.name} 
-              className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${char.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}
+              className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${char.imageFit === 'contain' ? 'object-contain' : 'object-cover object-top'}`}
             />
           ) : (
             <div className={`w-full h-full flex items-center justify-center ${tc.textSub}`}><Icons.User size={32} /></div>
