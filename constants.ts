@@ -166,8 +166,6 @@ const INITIAL_CAMPAIGNS: Campaign[] = [
 export const INITIAL_STATE: AppState = {
   campaigns: INITIAL_CAMPAIGNS,
   characters: [],
-  events: [],
-  relations: [],
   globalBackgrounds: [
     'https://picsum.photos/id/1002/1920/1080',
     'https://picsum.photos/id/1015/1920/1080',

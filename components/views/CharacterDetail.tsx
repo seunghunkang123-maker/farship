@@ -6,9 +6,6 @@ import { THEMES, THEME_KEYS } from '../../constants';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
 import TagLibraryModal from '../modals/TagLibraryModal';
 import { TagItem } from '../../types';
-import CharacterAssetsTab from './character/CharacterAssetsTab';
-import CharacterRelationsTab from './character/CharacterRelationsTab';
-import CharacterProgressTab from './character/CharacterProgressTab';
 
 // --- Colors Constant ---
 const MEMBER_COLORS: Record<string, string> = {
@@ -322,17 +319,17 @@ interface CharacterDetailProps {
   onToggleReveal?: (id: string, state: boolean) => void;
   isNameRevealed?: boolean;
   onToggleNameReveal?: (id: string, state: boolean) => void;
-  sessionId?: string;
-  onAutosave?: (char: Character) => void;
 }
+
+
 
 const CharacterDetail: React.FC<CharacterDetailProps> = ({ 
   character, campaign, allCharacters = [], allCampaigns = [], onSave, onDelete, onClose, isEditingNew = false,
   onAddComment, onUpdateComment, onDeleteComment, isGlobalReveal = false, isRevealed = false, onToggleReveal,
-  isNameRevealed = false, onToggleNameReveal, sessionId, onAutosave
+  isNameRevealed = false, onToggleNameReveal
 }) => {
   const [isEditing, setIsEditing] = useState(isEditingNew);
-  const [activeTab, setActiveTab] = useState<'INFO' | 'BIO' | 'ASSETS' | 'RELATIONS' | 'PROGRESS' | 'FILES' | 'COMMENTS'>('INFO');
+  const [activeTab, setActiveTab] = useState<'INFO' | 'BIO' | 'FILES' | 'COMMENTS'>('INFO');
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   
   const [editLayer, setEditLayer] = useState<'PUBLIC' | 'SECRET'>('PUBLIC');
@@ -374,92 +371,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     isNpc: false, imageFit: 'cover', summary: '', description: '', extraFiles: [], comments: [],
     updatedAt: Date.now(), alias: '', isNameBlurred: false, affiliations: []
   });
-
-  // Locking Logic
-  const LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-  const [lockWarning, setLockWarning] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isEditing && character && sessionId) {
-      // Check if locked by someone else
-      if (character.lockedBy && character.lockedBy !== sessionId) {
-        const lockedTime = character.lockedAt || 0;
-        if (Date.now() - lockedTime < LOCK_TIMEOUT) {
-          setLockWarning(`This character is currently being edited by another session (Locked). Editing is disabled.`);
-          setIsEditing(false);
-          return;
-        }
-      }
-      
-      // Acquire Lock
-      if (onAutosave) {
-        // We don't want to trigger a full re-render loop, but we need to update the DB
-        // onAutosave(lockedChar); // This might cause loop if not careful.
-        // Actually, let's do it in a separate effect or just assume we have the lock locally first.
-      }
-    }
-  }, [isEditing, character, sessionId]);
-
-  // Heartbeat & Autosave
-  useEffect(() => {
-    if (!isEditing || !sessionId || !onAutosave || lockWarning) return;
-
-    const interval = setInterval(() => {
-      // Update lock timestamp
-      onAutosave({ ...formData, lockedBy: sessionId, lockedAt: Date.now() });
-    }, 30000); // Every 30s
-
-    return () => clearInterval(interval);
-  }, [isEditing, sessionId, onAutosave, formData, lockWarning]);
-
-  // Autosave on change (Debounced)
-  useEffect(() => {
-    if (!isEditing || !sessionId || !onAutosave || lockWarning) return;
-    
-    const timer = setTimeout(() => {
-      onAutosave({ ...formData, lockedBy: sessionId, lockedAt: Date.now() });
-    }, 2000); // 2s debounce
-
-    return () => clearTimeout(timer);
-  }, [formData, isEditing, sessionId, onAutosave, lockWarning]);
-
-  // Unlock on Unmount/Close
-  useEffect(() => {
-    return () => {
-      if (isEditing && sessionId && onAutosave && !lockWarning && formData.id) {
-        // Attempt to unlock. Note: This might not fire reliably on tab close, but works for component unmount.
-      }
-    };
-  }, []);
-
-  const handleClose = () => {
-    if (isEditing && sessionId && onAutosave && !lockWarning) {
-       // Unlock
-       onAutosave({ ...formData, lockedBy: undefined, lockedAt: undefined });
-    }
-    onClose();
-  };
-
-  const handleSave = () => {
-    if (!formData.name.trim()) { alert("이름을 입력해주세요."); return; }
-    if (formData.secretProfile && Object.keys(formData.secretProfile).length === 0) {
-       setFormData(prev => ({ ...prev, secretProfile: undefined }));
-    }
-    
-    const finalData = { ...formData };
-    if (!showAliasInput) {
-       finalData.alias = '';
-       finalData.isNameBlurred = false;
-    }
-    if (finalData.secretProfile && !showSecretAliasInput) {
-       finalData.secretProfile.alias = '';
-    }
-
-    // Unlock on save
-    onSave({ ...finalData, updatedAt: Date.now(), lockedBy: undefined, lockedAt: undefined });
-    setEditLayer('PUBLIC');
-    setIsEditing(false);
-  };
 
 
 
@@ -801,6 +712,26 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     }
   };
 
+  const handleSave = () => {
+    if (!formData.name.trim()) { alert("이름을 입력해주세요."); return; }
+    if (formData.secretProfile && Object.keys(formData.secretProfile).length === 0) {
+       setFormData(prev => ({ ...prev, secretProfile: undefined }));
+    }
+    
+    const finalData = { ...formData };
+    if (!showAliasInput) {
+       finalData.alias = '';
+       finalData.isNameBlurred = false;
+    }
+    if (finalData.secretProfile && !showSecretAliasInput) {
+       finalData.secretProfile.alias = '';
+    }
+
+    onSave({ ...finalData, updatedAt: Date.now() });
+    setEditLayer('PUBLIC');
+    setIsEditing(false);
+  };
+
   const addAffiliation = (inputName?: string, inputRank?: string) => {
     const nameToAdd = inputName || newAffiliationName;
     if (!nameToAdd.trim()) return;
@@ -1000,18 +931,12 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         onClick={(e) => e.stopPropagation()} 
         className={`w-full min-h-full md:min-h-0 md:h-[95vh] md:max-w-[95vw] md:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border flex flex-col md:flex-row transition-all duration-500 ${tc.bgMain} ${isSecretRevealed ? `border-current ${tc.textAccent}` : tc.border}`}
       >
-        {lockWarning && (
-          <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white px-4 py-2 text-center font-bold text-sm shadow-lg animate-pulse">
-            <Icons.Lock size={16} className="inline mr-2 mb-0.5" />
-            {lockWarning}
-          </div>
-        )}
         
         {/* Left Column - Portrait & Status (Sidebar) */}
         <div className={`w-full md:w-[512px] p-6 md:p-8 flex flex-col border-r shrink-0 ${tc.bgPanel} ${tc.border} md:overflow-y-auto custom-scrollbar`}>
           {/* ... Sidebar content omitted for brevity ... */}
           <div className="flex justify-between md:hidden mb-6">
-            <button onClick={handleClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
+            <button onClick={onClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
             <button onClick={handleSave} className="px-4 py-2 bg-amber-700 text-white rounded-lg font-black text-xs">저장</button>
           </div>
           
@@ -1101,7 +1026,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         <div className="flex-1 flex flex-col relative md:h-full md:overflow-hidden">
           <div className={`sticky top-0 z-20 flex flex-col md:flex-row justify-between p-3 md:px-8 md:py-4 border-b ${tc.bgPanel} ${tc.border} backdrop-blur-xl shrink-0`}>
              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
-               {['INFO', 'BIO', 'ASSETS', 'RELATIONS', 'PROGRESS', 'FILES', 'COMMENTS'].map(tab => (
+               {['INFO', 'BIO', 'FILES', 'COMMENTS'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab as any)} className={`whitespace-nowrap px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab ? 'bg-white/10 text-white shadow-inner' : 'text-stone-500 hover:text-stone-300'}`}>{tab}</button>
                ))}
              </div>
@@ -1125,7 +1050,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                  ) : (
                    <button onClick={() => setIsEditing(true)} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Edit size={22} /></button>
                  )}
-                 <button onClick={handleClose} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Close size={24} /></button>
+                 <button onClick={onClose} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Close size={24} /></button>
                </div>
              </div>
           </div>
@@ -1342,40 +1267,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     <EditableField label="몸무게 (WEIGHT)" value={resolveValue('weight', 'weight')} onChange={v => editLayer === 'SECRET' ? updateSecretField('weight', v) : setFormData(p => ({...p, weight: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
                  </div>
                  <EditableField label="상세 설명 (DESCRIPTION)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
-              </div>
-            )}
-
-            {/* ASSETS TAB */}
-            {activeTab === 'ASSETS' && (
-              <div className="max-w-4xl">
-                <CharacterAssetsTab 
-                  character={formData} 
-                  isEditing={isEditing} 
-                  onChange={setFormData} 
-                />
-              </div>
-            )}
-
-            {/* RELATIONS TAB */}
-            {activeTab === 'RELATIONS' && (
-              <div className="max-w-3xl">
-                <CharacterRelationsTab 
-                  character={formData} 
-                  allCharacters={allCharacters}
-                  isEditing={isEditing} 
-                  onChange={setFormData} 
-                />
-              </div>
-            )}
-
-            {/* PROGRESS TAB */}
-            {activeTab === 'PROGRESS' && (
-              <div className="max-w-3xl">
-                <CharacterProgressTab 
-                  character={formData} 
-                  isEditing={isEditing} 
-                  onChange={setFormData} 
-                />
               </div>
             )}
 
@@ -1676,7 +1567,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         isOpen={isTagLibraryOpen}
         onClose={() => setIsTagLibraryOpen(false)}
         groupedTags={groupedTags}
-        existingTags={(editLayer === 'SECRET' ? currentAffiliations : formData.affiliations || []).map(a => a.name)}
+        existingTags={(formData.affiliations || []).map(a => a.name)}
         onAddTag={(tag) => {
           const newAff: CharacterAffiliation = {
             id: crypto.randomUUID(),
@@ -1685,19 +1576,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             isStrikethrough: false,
             isHidden: false
           };
-          
-          if (editLayer === 'SECRET') {
-             const currentList = currentAffiliations;
-             const cleanList = [...currentList, newAff].map(a => 
-               a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
-             );
-             updateSecretField('affiliations', cleanList);
-          } else {
-             setFormData(prev => ({
-                ...prev,
-                affiliations: [...(prev.affiliations || []), newAff]
-             }));
-          }
+          setFormData(prev => ({
+             ...prev,
+             affiliations: [...(prev.affiliations || []), newAff]
+          }));
         }}
         themeColor={tc.textAccent}
       />

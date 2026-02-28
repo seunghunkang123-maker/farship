@@ -1,5 +1,5 @@
 
-import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType, CharacterAffiliation, CombatStat, CharacterAsset, CharacterRelation, CharacterProgress } from '../types';
+import { AppState, Campaign, Character, CharacterComment, ExtraFile, SecretProfile, SystemType, CharacterAffiliation, CombatStat } from '../types';
 import { supabase } from './supabaseClient';
 import { INITIAL_STATE } from '../constants';
 
@@ -30,12 +30,6 @@ interface DbCharacter {
   custom_class: string | null;
   custom_subclass: string | null;
   secret_profile: SecretProfile | null; 
-  
-  // New JSON Columns
-  assets: CharacterAsset[] | null;
-  relations: CharacterRelation[] | null;
-  progression: CharacterProgress | null;
-
   updated_at: number;
 }
 
@@ -279,11 +273,6 @@ export const loadFullState = async (): Promise<AppState> => {
       customClass: c.custom_class || undefined,
       customSubclass: c.custom_subclass || undefined,
       secretProfile: c.secret_profile || undefined, 
-      
-      assets: c.assets || undefined,
-      relations: c.relations || undefined,
-      progression: c.progression || undefined,
-
       extraFiles: myFiles,
       comments: myComments,
       updatedAt: c.updated_at
@@ -364,11 +353,6 @@ export const saveCharacter = async (char: Character) => {
     custom_class: toDbValue(char.customClass),
     custom_subclass: toDbValue(char.customSubclass),
     secret_profile: toDbValue(char.secretProfile), 
-    
-    assets: char.assets && char.assets.length > 0 ? char.assets : null,
-    relations: char.relations && char.relations.length > 0 ? char.relations : null,
-    progression: toDbValue(char.progression),
-
     updated_at: char.updatedAt
   };
 

@@ -1,11 +1,9 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Campaign, Character, DND_CLASSES, SystemType, CORE_MEMBERS, CharacterRelation } from '../../types';
+import React, { useState, useMemo } from 'react';
+import { Campaign, Character, DND_CLASSES, SystemType, CORE_MEMBERS } from '../../types';
 import { Icons } from '../ui/Icons';
 import { THEMES, THEME_KEYS } from '../../constants';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
-import RelationshipGraph from '../features/RelationshipGraph';
-import { getCampaignRelations } from '../../services/characterService';
 
 interface CampaignDashboardProps {
   campaign: Campaign;
@@ -86,16 +84,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
   const [sortOrder, setSortOrder] = useState<'NAME' | 'RECENT' | 'LEVEL'>('RECENT');
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
   const [showTags, setShowTags] = useState(false);
-  
-  // Relationship Map State
-  const [showRelations, setShowRelations] = useState(false);
-  const [relations, setRelations] = useState<CharacterRelation[]>([]);
-
-  useEffect(() => {
-    if (showRelations && relations.length === 0) {
-      getCampaignRelations(campaign.id).then(setRelations).catch(console.error);
-    }
-  }, [showRelations, campaign.id]);
   
   // Theme State
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -186,16 +174,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
         </div>
         
         <div className="flex items-center justify-end gap-2 relative z-30 w-full md:w-auto">
-           {/* Relationship Map Toggle */}
-           <button 
-             onClick={() => setShowRelations(!showRelations)}
-             className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium text-sm transition-all shadow-lg border ${showRelations ? 'bg-indigo-600 text-white border-indigo-400' : `${theme.classes.buttonSecondary} border-transparent bg-black/20`}`}
-             title="관계도 보기"
-           >
-             <Icons.Network size={18} className={showRelations ? "text-white" : ""} />
-             <span className="hidden md:inline">관계도</span>
-           </button>
-
            {/* Global Reveal Toggle */}
            <button 
             onClick={onToggleGlobalReveal}
@@ -557,33 +535,6 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
           </div>
         )}
       </div>
-
-      {/* Relationship Graph Modal */}
-      {showRelations && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col animate-in fade-in duration-300">
-           <div className="flex justify-between items-center p-4 border-b border-white/10 bg-black/40">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                 <Icons.Network className="text-indigo-400" />
-                 관계도 (Relationship Map)
-              </h2>
-              <button onClick={() => setShowRelations(false)} className="p-2 hover:bg-white/10 rounded-full text-white transition-colors">
-                 <Icons.Close size={24} />
-              </button>
-           </div>
-           <div className="flex-1 overflow-hidden relative">
-              <RelationshipGraph 
-                 characters={characters} 
-                 relations={relations} 
-                 width={window.innerWidth}
-                 height={window.innerHeight - 80}
-                 onNodeClick={(id) => {
-                    setShowRelations(false);
-                    onSelectCharacter(id);
-                 }}
-              />
-           </div>
-        </div>
-      )}
     </div>
   );
 };

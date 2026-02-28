@@ -62,39 +62,6 @@ export interface SecretProfile {
   comments?: CharacterComment[];
 }
 
-export interface CharacterAsset {
-  id: string;
-  name: string;
-  type: 'EQUIPMENT' | 'SPELL' | 'ARTIFACT' | 'CYBERWARE' | 'ABILITY' | 'OTHER';
-  description: string;
-  status?: string; 
-  imageUrl?: string;
-  linkUrl?: string;
-  tags?: string[];
-}
-
-export interface CharacterRelation {
-  id: string;
-  targetCharacterId: string;
-  type: 'ALLY' | 'ENEMY' | 'FAMILY' | 'LOVE' | 'BUSINESS' | 'SECRET' | 'OTHER';
-  description: string;
-  isSecret: boolean;
-}
-
-export interface CharacterProgressStage {
-  id: string;
-  title: string;
-  description: string;
-  isCompleted: boolean;
-  unlockedAt?: number;
-}
-
-export interface CharacterProgress {
-  currentStageIndex: number;
-  stages: CharacterProgressStage[];
-  isSecret: boolean; 
-}
-
 export interface Character {
   id: string;
   campaignId: string;
@@ -124,17 +91,7 @@ export interface Character {
   extraFiles: ExtraFile[];
   comments: CharacterComment[]; 
   secretProfile?: SecretProfile;
-  
-  // New Features
-  assets?: CharacterAsset[];
-  relations?: CharacterRelation[];
-  progression?: CharacterProgress;
-
   updatedAt: number;
-  
-  // Locking
-  lockedBy?: string; // Session ID
-  lockedAt?: number; // Timestamp
 }
 
 export interface Campaign {
