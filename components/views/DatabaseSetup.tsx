@@ -160,6 +160,18 @@ begin
     alter table characters add column affiliations jsonb;
   end if;
 
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='assets') then
+    alter table characters add column assets jsonb;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='relations') then
+    alter table characters add column relations jsonb;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_name='characters' and column_name='progression') then
+    alter table characters add column progression jsonb;
+  end if;
+
   -- Extra Files expansion
   if not exists (select 1 from information_schema.columns where table_name='extra_files' and column_name='file_type') then
     alter table extra_files add column file_type text default 'REGULAR';
@@ -292,10 +304,11 @@ NOTIFY pgrst, 'reload config';
 
 interface Props {
   onRetry: () => void;
+  onClose?: () => void;
   errorMsg?: string;
 }
 
-const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
+const DatabaseSetup: React.FC<Props> = ({ onRetry, onClose, errorMsg }) => {
   const [activeTab, setActiveTab] = useState<'INITIAL' | 'UPDATE' | 'RESTORE' | 'STORAGE'>('STORAGE');
 
   const copySql = (text: string) => {
@@ -304,7 +317,15 @@ const DatabaseSetup: React.FC<Props> = ({ onRetry, errorMsg }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative">
+      {onClose && (
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white bg-slate-800 rounded-full border border-slate-700 z-50"
+        >
+          <Icons.Close size={24} />
+        </button>
+      )}
       <div className="bg-slate-800 p-8 rounded-xl max-w-3xl w-full border border-slate-700 shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center gap-3 mb-6 text-red-400">
           <Icons.Refresh size={32} />

@@ -39,6 +39,10 @@ create table characters (
   cpred_origin text,
   custom_class text,
   custom_subclass text,
+  secret_profile jsonb,
+  assets jsonb,
+  relations jsonb,
+  progression jsonb,
   updated_at bigint default extract(epoch from now()) * 1000
 );
 
