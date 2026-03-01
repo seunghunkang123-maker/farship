@@ -10,6 +10,8 @@ import DatabaseSetup from './components/views/DatabaseSetup';
 import AllCharactersView from './components/views/AllCharactersView';
 import SettingsModal from './components/modals/SettingsModal';
 import PasswordModal from './components/modals/PasswordModal';
+import SearchFilterPanel from './components/views/SearchFilterPanel';
+import { SearchFilters, filterCharacters } from './utils/searchUtils';
 import { Icons } from './components/ui/Icons';
 import { INITIAL_STATE, THEMES, THEME_KEYS } from './constants';
 
@@ -20,11 +22,26 @@ const App: React.FC = () => {
   const [dbError, setDbError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  // Session ID for Locking
+  const sessionId = React.useRef(crypto.randomUUID()).current;
+
   // 네비게이션 상태
   const [currentView, setCurrentView] = useState<'HOME' | 'CAMPAIGN' | 'ALL_CHARACTERS'>('HOME');
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [activeCharacterId, setActiveCharacterId] = useState<string | null>(null); 
   const [isCreatingCharacter, setIsCreatingCharacter] = useState(false);
+
+  // Search & Filter State
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({
+    query: '',
+    campaignIds: [],
+    systems: [],
+    tags: [],
+    players: [],
+    isNpc: undefined,
+    includeSecret: false
+  });
 
   // 진상(Truth) 모드 상태 관리
   const [revealedCharacterIds, setRevealedCharacterIds] = useState<Set<string>>(new Set());
@@ -83,6 +100,21 @@ const App: React.FC = () => {
     try {
       const fetched = await loadFullState();
       setData(fetched);
+      
+      // Auto-reveal based on progression
+      const autoRevealed = new Set<string>();
+      fetched.characters.forEach(c => {
+        if (c.progression && c.progression.revealSecretOnStage !== undefined) {
+          if (c.progression.currentStageIndex >= c.progression.revealSecretOnStage) {
+            autoRevealed.add(c.id);
+          }
+        }
+      });
+      setRevealedCharacterIds(prev => {
+        const next = new Set(prev);
+        autoRevealed.forEach(id => next.add(id));
+        return next;
+      });
     } catch (e) {
       console.error("Load failed:", e);
       if (showLoading) {
@@ -131,9 +163,15 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Filtered Characters for All View
+  const filteredAllCharacters = React.useMemo(() => {
+    if (!data) return [];
+    return filterCharacters(data.characters, data.campaigns, searchFilters);
+  }, [data, searchFilters]);
+
   // 에러 화면
   if (dbError) {
-    return <DatabaseSetup onRetry={() => init(true)} errorMsg={dbError} />;
+    return <DatabaseSetup onRetry={() => init(true)} onClose={() => setDbError(null)} errorMsg={dbError} />;
   }
 
   // 로딩 중 표시 (최초 로드 시에만)
@@ -227,7 +265,7 @@ const App: React.FC = () => {
   };
 
   // 캐릭터 CRUD
-  const saveCharacter = async (char: Character) => {
+  const saveCharacter = async (char: Character, shouldClose = true) => {
     try {
       await dbSaveCharacter(char);
       // setData 업데이트는 Realtime 구독이 자동으로 처리할 수도 있지만,
@@ -244,6 +282,11 @@ const App: React.FC = () => {
         }
         return { ...prev, characters: newChars };
       });
+      
+      if (shouldClose) {
+        setActiveCharacterId(null);
+        setIsCreatingCharacter(false);
+      }
     } catch (e) {
       handleError(e, "캐릭터 저장 중 오류가 발생했습니다.");
     }
@@ -415,6 +458,15 @@ const App: React.FC = () => {
 
   return (
     <Layout themeClasses={activeCampaign ? activeTheme.classes : undefined}>
+      {/* Search Toggle Button (Floating) */}
+      <button
+        onClick={() => setIsSearchOpen(true)}
+        className="fixed bottom-6 right-6 z-40 p-4 bg-amber-600 text-white rounded-full shadow-xl hover:bg-amber-500 hover:scale-105 transition-all border border-amber-400/50"
+        title="검색 및 필터"
+      >
+        <Icons.Search size={24} />
+      </button>
+
       {isSyncing && (
         <div className="fixed top-4 right-4 z-50">
            <div className="bg-black/80 backdrop-blur text-amber-500 text-xs px-3 py-1.5 rounded-full flex items-center gap-2 border border-amber-500/30 animate-pulse">
@@ -439,7 +491,7 @@ const App: React.FC = () => {
       {currentView === 'ALL_CHARACTERS' && (
         <AllCharactersView
           campaigns={data.campaigns}
-          characters={data.characters}
+          characters={filteredAllCharacters}
           onBack={goHome}
           onSelectCharacter={(id) => {
              // Find campaign for this char
@@ -500,6 +552,8 @@ const App: React.FC = () => {
           onToggleReveal={(id, state) => toggleCharacterReveal(id, state)}
           isNameRevealed={activeCharacterId ? nameRevealedIds.has(activeCharacterId) : false}
           onToggleNameReveal={(id, state) => toggleNameReveal(id, state)}
+          sessionId={sessionId}
+          onAutosave={(char) => saveCharacter(char, false)}
         />
       )}
 
@@ -513,6 +567,19 @@ const App: React.FC = () => {
         onAddCampaign={addCampaign}
         onDeleteCampaign={confirmDeleteCampaign}
         onUpdateGlobalBackgrounds={updateGlobalBackgrounds}
+      />
+
+      <SearchFilterPanel 
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        filters={searchFilters}
+        onFilterChange={setSearchFilters}
+        onSearch={() => {
+          setIsSearchOpen(false);
+          setCurrentView('ALL_CHARACTERS');
+        }}
+        campaigns={data.campaigns}
+        characters={data.characters}
       />
 
       <PasswordModal 

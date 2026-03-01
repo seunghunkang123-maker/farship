@@ -59,8 +59,31 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
 
   // Render a single character card (extracted for reuse)
   const renderCharacterCard = (char: Character, campaign?: Campaign) => {
+    let displayImg = char.imageUrl;
+    
+    // 1. Check Progression Linked Profile
+    if (char.progression && char.progression.stages && char.progression.currentStageIndex > 0) {
+       // Find the latest stage that has a linked profile
+       // We look backwards from current stage
+       for (let i = char.progression.currentStageIndex - 1; i >= 0; i--) {
+          const stage = char.progression.stages[i];
+          if (stage && stage.linkedProfileId) {
+             if (stage.linkedProfileId === 'BASE') {
+                displayImg = char.imageUrl;
+                break;
+             }
+             const profile = char.profiles?.find(p => p.id === stage.linkedProfileId);
+             if (profile && profile.image_url) {
+                displayImg = profile.image_url;
+                break;
+             }
+          }
+       }
+    }
+
+    // 2. Check Active Portrait (Override if set)
     const activePortrait = char.extraFiles.find(f => f.useAsPortrait && f.imageUrl && !f.isSecret);
-    const displayImg = activePortrait ? activePortrait.imageUrl : char.imageUrl;
+    if (activePortrait) displayImg = activePortrait.imageUrl;
     
     // Determine Theme based on Character's Campaign
     const charCampaign = campaign || campaigns.find(c => c.id === char.campaignId);

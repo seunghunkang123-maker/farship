@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation, CombatStat } from '../../types';
+import { Character, Campaign, DND_CLASSES, CPRED_ROLES, BOB_PLAYBOOKS, ExtraFile, SystemType, CharacterComment, CORE_MEMBERS, SecretProfile, CharacterAffiliation, CombatStat, CharacterProfile } from '../../types';
 import { Icons } from '../ui/Icons';
 import { uploadImage } from '../../services/upload';
 import { THEMES, THEME_KEYS } from '../../constants';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
 import TagLibraryModal from '../modals/TagLibraryModal';
 import { TagItem } from '../../types';
+import CharacterAssetsTab from './character/CharacterAssetsTab';
+import CharacterRelationsTab from './character/CharacterRelationsTab';
+import CharacterProgressTab from './character/CharacterProgressTab';
 
 // --- Colors Constant ---
 const MEMBER_COLORS: Record<string, string> = {
@@ -319,22 +322,21 @@ interface CharacterDetailProps {
   onToggleReveal?: (id: string, state: boolean) => void;
   isNameRevealed?: boolean;
   onToggleNameReveal?: (id: string, state: boolean) => void;
+  sessionId?: string;
+  onAutosave?: (char: Character) => void;
 }
-
-
 
 const CharacterDetail: React.FC<CharacterDetailProps> = ({ 
   character, campaign, allCharacters = [], allCampaigns = [], onSave, onDelete, onClose, isEditingNew = false,
   onAddComment, onUpdateComment, onDeleteComment, isGlobalReveal = false, isRevealed = false, onToggleReveal,
-  isNameRevealed = false, onToggleNameReveal
+  isNameRevealed = false, onToggleNameReveal, sessionId, onAutosave
 }) => {
   const [isEditing, setIsEditing] = useState(isEditingNew);
-  const [activeTab, setActiveTab] = useState<'INFO' | 'BIO' | 'FILES' | 'COMMENTS'>('INFO');
+  const [activeTab, setActiveTab] = useState<'INFO' | 'BIO' | 'ASSETS' | 'RELATIONS' | 'PROGRESS' | 'FILES' | 'COMMENTS'>('INFO');
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   
-  const [editLayer, setEditLayer] = useState<'PUBLIC' | 'SECRET'>('PUBLIC');
-  const isSecretRevealed = isGlobalReveal || isRevealed;
-
+  const [activeProfileId, setActiveProfileId] = useState<string>('BASE');
+  
   const [showAliasInput, setShowAliasInput] = useState(false);
   const [showSecretAliasInput, setShowSecretAliasInput] = useState(false);
 
@@ -351,6 +353,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   
   // Comment Editing
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null);
 
   // Creation Form State
   const [commentName, setCommentName] = useState('관찰자');
@@ -371,6 +374,95 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     isNpc: false, imageFit: 'cover', summary: '', description: '', extraFiles: [], comments: [],
     updatedAt: Date.now(), alias: '', isNameBlurred: false, affiliations: []
   });
+
+  const hasSecretProfile = (formData.profiles?.length || 0) > 0;
+  const isSecretRevealed = isGlobalReveal || isRevealed;
+
+  // Locking Logic
+  const LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  const [lockWarning, setLockWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isEditing && character && sessionId) {
+      // Check if locked by someone else
+      if (character.lockedBy && character.lockedBy !== sessionId) {
+        const lockedTime = character.lockedAt || 0;
+        if (Date.now() - lockedTime < LOCK_TIMEOUT) {
+          setLockWarning(`This character is currently being edited by another session (Locked). Editing is disabled.`);
+          setIsEditing(false);
+          return;
+        }
+      }
+      
+      // Acquire Lock
+      if (onAutosave) {
+        // We don't want to trigger a full re-render loop, but we need to update the DB
+        // onAutosave(lockedChar); // This might cause loop if not careful.
+        // Actually, let's do it in a separate effect or just assume we have the lock locally first.
+      }
+    }
+  }, [isEditing, character, sessionId]);
+
+  // Heartbeat & Autosave
+  useEffect(() => {
+    if (!isEditing || !sessionId || !onAutosave || lockWarning) return;
+
+    const interval = setInterval(() => {
+      // Update lock timestamp
+      onAutosave({ ...formData, lockedBy: sessionId, lockedAt: Date.now() });
+    }, 30000); // Every 30s
+
+    return () => clearInterval(interval);
+  }, [isEditing, sessionId, onAutosave, formData, lockWarning]);
+
+  // Autosave on change (Debounced)
+  useEffect(() => {
+    if (!isEditing || !sessionId || !onAutosave || lockWarning) return;
+    
+    const timer = setTimeout(() => {
+      onAutosave({ ...formData, lockedBy: sessionId, lockedAt: Date.now() });
+    }, 2000); // 2s debounce
+
+    return () => clearTimeout(timer);
+  }, [formData, isEditing, sessionId, onAutosave, lockWarning]);
+
+  // Unlock on Unmount/Close
+  useEffect(() => {
+    return () => {
+      if (isEditing && sessionId && onAutosave && !lockWarning && formData.id) {
+        // Attempt to unlock. Note: This might not fire reliably on tab close, but works for component unmount.
+      }
+    };
+  }, []);
+
+  const handleClose = () => {
+    if (isEditing && sessionId && onAutosave && !lockWarning) {
+       // Unlock
+       onAutosave({ ...formData, lockedBy: undefined, lockedAt: undefined });
+    }
+    onClose();
+  };
+
+  const handleSave = () => {
+    if (!formData.name.trim()) { alert("이름을 입력해주세요."); return; }
+    if (formData.profiles && formData.profiles.length === 0) {
+       setFormData(prev => ({ ...prev, profiles: undefined }));
+    }
+    
+    const finalData = { ...formData };
+    if (!showAliasInput) {
+       finalData.alias = '';
+       finalData.isNameBlurred = false;
+    }
+    if (finalData.profiles && !showSecretAliasInput) {
+       finalData.profiles = finalData.profiles.map(p => ({ ...p, alias: '' }));
+    }
+
+    // Unlock on save
+    onSave({ ...finalData, updatedAt: Date.now(), lockedBy: undefined, lockedAt: undefined });
+    setActiveProfileId('BASE');
+    setIsEditing(false);
+  };
 
 
 
@@ -398,7 +490,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       };
 
       c.affiliations?.forEach(a => processTag(a.name, a.rank));
-      c.secretProfile?.affiliations?.forEach(a => processTag(a.name, a.rank));
+      c.profiles?.forEach(p => p.affiliations?.forEach(a => processTag(a.name, a.rank)));
     });
 
     // 2. Identify Universal Tags
@@ -436,7 +528,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       Universal: universalTagNames,
       ...campaignTags
     };
-  }, [allCharacters, allCampaigns, formData.id, formData.affiliations, formData.secretProfile?.affiliations, formData.campaignId]);
+  }, [allCharacters, allCampaigns, formData.id, formData.affiliations, formData.profiles?.find(p => p.id === activeProfileId)?.affiliations, formData.campaignId]);
 
   // Check if any tags exist
   const hasExistingTags = useMemo(() => {
@@ -445,13 +537,14 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const currentAffiliations: CharacterAffiliation[] = useMemo(() => {
     const publicAffs = formData.affiliations || [];
-    const secretAffs = formData.secretProfile?.affiliations || [];
+    const profile = formData.profiles?.find(p => p.id === activeProfileId);
+    const secretAffs = profile?.affiliations || [];
 
-    if (editLayer === 'PUBLIC' && isEditing) {
+    if (activeProfileId === 'BASE' && isEditing) {
        return publicAffs;
     }
 
-    if ((editLayer === 'SECRET' && isEditing) || (!isEditing && isSecretRevealed)) {
+    if ((activeProfileId !== 'BASE' && isEditing) || (!isEditing && isSecretRevealed)) {
         const secretMap = new Map(secretAffs.map(a => [a.name, a]));
         const merged = [...secretAffs];
         publicAffs.forEach(pa => {
@@ -465,30 +558,43 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         return merged;
     }
     return publicAffs;
-  }, [formData, isEditing, editLayer, isSecretRevealed]);
+  }, [formData, isEditing, activeProfileId, isSecretRevealed]);
 
   const currentFiles: ExtraFile[] = useMemo(() => {
-    if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
-    return isSecretRevealed ? (formData.secretProfile?.extraFiles || []) : formData.extraFiles;
-  }, [formData, isEditing, editLayer, isSecretRevealed]);
+    const profile = formData.profiles?.find(p => p.id === activeProfileId);
+    if (isEditing) return activeProfileId !== 'BASE' ? (profile?.extraFiles || []) : formData.extraFiles;
+    return isSecretRevealed && activeProfileId !== 'BASE' ? (profile?.extraFiles || []) : formData.extraFiles;
+  }, [formData, isEditing, activeProfileId, isSecretRevealed]);
 
   const currentComments: CharacterComment[] = useMemo(() => {
-    if (isEditing) return editLayer === 'SECRET' ? (formData.secretProfile?.comments || []) : formData.comments;
-    return isSecretRevealed ? (formData.secretProfile?.comments || []) : formData.comments;
-  }, [formData, isEditing, editLayer, isSecretRevealed]);
-
+    const profile = formData.profiles?.find(p => p.id === activeProfileId);
+    if (isEditing) return activeProfileId !== 'BASE' ? (profile?.comments || []) : formData.comments;
+    return isSecretRevealed && activeProfileId !== 'BASE' ? (profile?.comments || []) : formData.comments;
+  }, [formData, isEditing, activeProfileId, isSecretRevealed]);
 
   useEffect(() => {
     if (character) {
       if (!isEditing) {
-        setFormData(character);
+        let newFormData = { ...character };
+        if (newFormData.secretProfile && (!newFormData.profiles || newFormData.profiles.length === 0)) {
+          newFormData.profiles = [{
+            ...newFormData.secretProfile,
+            id: 'secret-legacy',
+            name: '진척도 1'
+          }];
+          delete newFormData.secretProfile;
+        }
+        setFormData(newFormData);
         const isMember = CORE_MEMBERS.includes(character.playerName || '');
         setIsGuestPlayer(!isMember && !!character.playerName);
         setShowAliasInput(!!character.alias);
-        setShowSecretAliasInput(!!character.secretProfile?.alias);
+        
+        const hasSecretAlias = newFormData.profiles?.some(p => !!p.alias);
+        setShowSecretAliasInput(!!hasSecretAlias);
+        
         if (formData.id !== character.id) {
            setRevealedIds(new Set()); 
-           setEditLayer('PUBLIC');
+           setActiveProfileId('BASE');
         }
       }
     } else {
@@ -506,24 +612,33 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         setIsGuestPlayer(false);
         setShowAliasInput(false);
         setShowSecretAliasInput(false);
-        setEditLayer('PUBLIC');
+        setActiveProfileId('BASE');
       }
     }
   }, [character, campaign, isEditing]);
 
-  const updateSecretField = (field: keyof SecretProfile, value: any) => {
-    setFormData(prev => ({ ...prev, secretProfile: { ...(prev.secretProfile || {}), [field]: value } }));
+  const updateProfileField = (field: keyof CharacterProfile, value: any) => {
+    if (activeProfileId === 'BASE') return;
+    setFormData(prev => {
+      const profiles = prev.profiles || [];
+      const index = profiles.findIndex(p => p.id === activeProfileId);
+      if (index === -1) return prev;
+      const newProfiles = [...profiles];
+      newProfiles[index] = { ...newProfiles[index], [field]: value };
+      return { ...prev, profiles: newProfiles };
+    });
   };
 
-  const resolveValue = (publicField: keyof Character, secretField: keyof SecretProfile): string => {
+  const resolveValue = (publicField: keyof Character, secretField: keyof CharacterProfile): string => {
     let val: any;
+    const profile = formData.profiles?.find(p => p.id === activeProfileId);
     if (isEditing) {
-      if (editLayer === 'SECRET') val = formData.secretProfile?.[secretField];
+      if (activeProfileId !== 'BASE') val = profile?.[secretField];
       else val = formData[publicField];
     } else {
       // View Mode
-      if (isSecretRevealed && formData.secretProfile?.[secretField]) {
-         val = formData.secretProfile[secretField];
+      if (isSecretRevealed && activeProfileId !== 'BASE' && profile?.[secretField]) {
+         val = profile[secretField];
       } else {
          val = formData[publicField];
       }
@@ -544,15 +659,16 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       title: '새 항목',
       content: '',
       fileType: 'REGULAR',
-      isSecret: editLayer === 'SECRET',
+      isSecret: activeProfileId !== 'BASE',
       useAsPortrait: false,
       combatStats: [],
       imageFit: 'cover'
     };
     
-    if (editLayer === 'SECRET') {
-        const current = formData.secretProfile?.extraFiles || [];
-        updateSecretField('extraFiles', [newFile, ...current]);
+    if (activeProfileId !== 'BASE') {
+        const profile = formData.profiles?.find(p => p.id === activeProfileId);
+        const current = profile?.extraFiles || [];
+        updateProfileField('extraFiles', [newFile, ...current]);
     } else {
         setFormData(prev => ({ ...prev, extraFiles: [newFile, ...prev.extraFiles] }));
     }
@@ -560,9 +676,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const updateExtraFile = (id: string, field: keyof ExtraFile, value: any) => {
      const updater = (list: ExtraFile[]) => list.map(f => f.id === id ? { ...f, [field]: value } : f);
-     if (editLayer === 'SECRET') {
-         const current = formData.secretProfile?.extraFiles || [];
-         updateSecretField('extraFiles', updater(current));
+     if (activeProfileId !== 'BASE') {
+         const profile = formData.profiles?.find(p => p.id === activeProfileId);
+        const current = profile?.extraFiles || [];
+         updateProfileField('extraFiles', updater(current));
      } else {
          setFormData(prev => ({ ...prev, extraFiles: updater(prev.extraFiles) }));
      }
@@ -570,9 +687,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const removeExtraFile = (id: string) => {
      const filter = (list: ExtraFile[]) => list.filter(f => f.id !== id);
-     if (editLayer === 'SECRET') {
-         const current = formData.secretProfile?.extraFiles || [];
-         updateSecretField('extraFiles', filter(current));
+     if (activeProfileId !== 'BASE') {
+         const profile = formData.profiles?.find(p => p.id === activeProfileId);
+        const current = profile?.extraFiles || [];
+         updateProfileField('extraFiles', filter(current));
      } else {
          setFormData(prev => ({ ...prev, extraFiles: filter(prev.extraFiles) }));
      }
@@ -587,8 +705,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
      const singleUpdater = (list: ExtraFile[]) => list.map(f => f.id === id ? { ...f, useAsPortrait } : { ...f, useAsPortrait: false });
      
      if (useAsPortrait) {
-         if (editLayer === 'SECRET') {
-             updateSecretField('extraFiles', singleUpdater(formData.secretProfile?.extraFiles || []));
+         if (activeProfileId !== 'BASE') {
+             const profile = formData.profiles?.find(p => p.id === activeProfileId);
+             updateProfileField('extraFiles', singleUpdater(profile?.extraFiles || []));
          } else {
              setFormData(prev => ({ ...prev, extraFiles: singleUpdater(prev.extraFiles) }));
          }
@@ -636,9 +755,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             createdAt: timestamp
         };
         
-        if (isEditing && editLayer === 'SECRET') {
-            const current = formData.secretProfile?.comments || [];
-            updateSecretField('comments', current.map(c => c.id === editingCommentId ? updated : c));
+        if (isEditing && activeProfileId !== 'BASE') {
+            const profile = formData.profiles?.find(p => p.id === activeProfileId);
+            const current = profile?.comments || [];
+            updateProfileField('comments', current.map(c => c.id === editingCommentId ? updated : c));
         } else {
             if (onUpdateComment) onUpdateComment(updated);
             setFormData(prev => ({
@@ -659,9 +779,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             createdAt: timestamp
         };
 
-        if (isEditing && editLayer === 'SECRET') {
-            const current = formData.secretProfile?.comments || [];
-            updateSecretField('comments', [...current, newComment]);
+        if (isEditing && activeProfileId !== 'BASE') {
+            const profile = formData.profiles?.find(p => p.id === activeProfileId);
+            const current = profile?.comments || [];
+            updateProfileField('comments', [...current, newComment]);
         } else {
             if (onAddComment) onAddComment(newComment);
             setFormData(prev => ({
@@ -674,11 +795,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   };
 
   const confirmDeleteComment = (commentId: string) => {
-      if (!window.confirm("정말 삭제하시겠습니까?")) return;
-      
-      if (isEditing && editLayer === 'SECRET') {
-          const current = formData.secretProfile?.comments || [];
-          updateSecretField('comments', current.filter(c => c.id !== commentId));
+      if (isEditing && activeProfileId !== 'BASE') {
+          const profile = formData.profiles?.find(p => p.id === activeProfileId);
+            const current = profile?.comments || [];
+          updateProfileField('comments', current.filter(c => c.id !== commentId));
       } else {
           if (onDeleteComment) onDeleteComment(commentId, formData.id);
           setFormData(prev => ({
@@ -691,45 +811,19 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
           setEditingCommentId(null);
           setCommentText('');
       }
+      setConfirmDeleteCommentId(null);
   };
 
-  const handleToggleReveal = () => {
-    if (isGlobalReveal) return;
-    if (onToggleReveal) {
-      onToggleReveal(formData.id, !isSecretRevealed);
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetLayer: 'PUBLIC' | 'SECRET') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetProfileId: string) => {
     if (e.target.files && e.target.files[0]) {
       try {
         const url = await uploadImage(e.target.files[0]);
-        if (targetLayer === 'PUBLIC') setFormData(prev => ({ ...prev, imageUrl: url }));
-        else updateSecretField('image_url', url);
+        if (targetProfileId === 'BASE') setFormData(prev => ({ ...prev, imageUrl: url }));
+        else updateProfileField('image_url', url);
       } catch (error) {
         alert("이미지 업로드 실패: " + (error as Error).message);
       }
     }
-  };
-
-  const handleSave = () => {
-    if (!formData.name.trim()) { alert("이름을 입력해주세요."); return; }
-    if (formData.secretProfile && Object.keys(formData.secretProfile).length === 0) {
-       setFormData(prev => ({ ...prev, secretProfile: undefined }));
-    }
-    
-    const finalData = { ...formData };
-    if (!showAliasInput) {
-       finalData.alias = '';
-       finalData.isNameBlurred = false;
-    }
-    if (finalData.secretProfile && !showSecretAliasInput) {
-       finalData.secretProfile.alias = '';
-    }
-
-    onSave({ ...finalData, updatedAt: Date.now() });
-    setEditLayer('PUBLIC');
-    setIsEditing(false);
   };
 
   const addAffiliation = (inputName?: string, inputRank?: string) => {
@@ -747,7 +841,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     }
 
     // Check duplication in current list
-    const currentList = editLayer === 'SECRET' 
+    const currentList = activeProfileId !== 'BASE' 
         ? (currentAffiliations || []) 
         : (formData.affiliations || []);
     
@@ -764,11 +858,11 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
       isHidden: false
     };
 
-    if (editLayer === 'SECRET') {
+    if (activeProfileId !== 'BASE') {
       const cleanList = [...currentList, newAff].map(a => 
         a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
       );
-      updateSecretField('affiliations', cleanList);
+      updateProfileField('affiliations', cleanList);
     } else {
       setFormData(prev => ({ ...prev, affiliations: [...(prev.affiliations || []), newAff] }));
     }
@@ -781,14 +875,14 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   };
 
   const removeAffiliation = (index: number, aff: CharacterAffiliation) => {
-    if (editLayer === 'SECRET') {
+    if (activeProfileId !== 'BASE') {
       const currentList = [...currentAffiliations];
       if (aff.id.startsWith('virtual-')) {
          const newList = currentList.map((a, i) => {
              if (i === index) return { ...a, id: crypto.randomUUID(), isHidden: true };
              return a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a;
          });
-         updateSecretField('affiliations', newList);
+         updateProfileField('affiliations', newList);
       } else {
          const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
          if (isPublicRef) {
@@ -796,19 +890,19 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                const newList = currentList.filter(a => a.id !== aff.id).map(a => 
                    a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
                );
-               updateSecretField('affiliations', newList);
+               updateProfileField('affiliations', newList);
             } else {
                 const newList = currentList.map(a => 
                    a.id === aff.id ? { ...a, isHidden: true } : 
                    a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
                );
-               updateSecretField('affiliations', newList);
+               updateProfileField('affiliations', newList);
             }
          } else {
              const newList = currentList.filter(a => a.id !== aff.id).map(a => 
                  a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
              );
-             updateSecretField('affiliations', newList);
+             updateProfileField('affiliations', newList);
          }
       }
     } else {
@@ -818,13 +912,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   };
 
   const toggleAffiliationStrikethrough = (index: number, aff: CharacterAffiliation) => {
-    if (editLayer === 'SECRET') {
+    if (activeProfileId !== 'BASE') {
         const currentList = [...currentAffiliations];
         const newList = currentList.map((a, i) => {
             if (i === index) return { ...a, isStrikethrough: !a.isStrikethrough };
             return a;
         }).map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
-        updateSecretField('affiliations', newList);
+        updateProfileField('affiliations', newList);
     } else {
       const currentList = formData.affiliations || [];
       setFormData(prev => ({ ...prev, affiliations: currentList.map((a, i) => i === index ? {...a, isStrikethrough: !a.isStrikethrough} : a) }));
@@ -832,13 +926,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   };
 
   const toggleAffiliationHidden = (index: number, aff: CharacterAffiliation) => {
-    if (editLayer === 'SECRET') {
+    if (activeProfileId !== 'BASE') {
         const currentList = [...currentAffiliations];
         const newList = currentList.map((a, i) => {
             if (i === index) return { ...a, isHidden: !a.isHidden };
             return a;
         }).map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
-        updateSecretField('affiliations', newList);
+        updateProfileField('affiliations', newList);
     } else {
       const currentList = formData.affiliations || [];
       setFormData(prev => ({ ...prev, affiliations: currentList.map((a, i) => i === index ? {...a, isHidden: !a.isHidden} : a) }));
@@ -870,9 +964,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     listCopy.splice(fromIndex, 1);
     listCopy.splice(toIndex, 0, item);
 
-    if (editLayer === 'SECRET') {
+    if (activeProfileId !== 'BASE') {
        const cleanList = listCopy.map(a => a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a);
-       updateSecretField('affiliations', cleanList);
+       updateProfileField('affiliations', cleanList);
     } else {
        setFormData(prev => ({ ...prev, affiliations: listCopy }));
     }
@@ -888,8 +982,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   }, [currentFiles, revealedIds]);
 
   let displayImageUrl = formData.imageUrl;
-  if (isEditing) { if (editLayer === 'SECRET') displayImageUrl = formData.secretProfile?.image_url || formData.imageUrl; } 
-  else { if (isSecretRevealed && formData.secretProfile?.image_url) displayImageUrl = formData.secretProfile.image_url; }
+  if (isEditing) { if (activeProfileId !== 'BASE') displayImageUrl = formData.profiles?.find(p => p.id === activeProfileId)?.image_url || formData.imageUrl; } 
+  else { if (isSecretRevealed && formData.profiles?.find(p => p.id === activeProfileId)?.image_url) displayImageUrl = formData.profiles?.find(p => p.id === activeProfileId)?.image_url; }
   if (activePortraitFile) displayImageUrl = activePortraitFile.imageUrl;
 
   let nameLabel = '이름 (NAME)'; let levelLabel = '레벨 / 경험치 (LEVEL / XP)'; let levelPlaceholder = '예: Lv.5';
@@ -897,8 +991,6 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
   if (campaign.system === SystemType.CYBERPUNK_RED) { nameLabel = '이름 (Name)'; levelLabel = '평판 (Reputation)'; levelPlaceholder = '예: 4'; }
   else if (campaign.system === SystemType.COC7) { levelLabel = '나이 / 경력'; levelPlaceholder = '예: 34세, 고고학 교수'; }
   else if (campaign.system === SystemType.BAND_OF_BLADES) { levelLabel = '등급 / 경험치'; levelPlaceholder = '예: 베테랑, EXP 3'; }
-
-  const hasSecretProfile = formData.secretProfile && Object.keys(formData.secretProfile).length > 0;
 
   const handleNameClick = () => {
     if (!isEditing && formData.alias && formData.isNameBlurred && !isNameRevealed && onToggleNameReveal) {
@@ -908,35 +1000,86 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
   const headerName = useMemo(() => {
     if (isEditing) {
-      if (editLayer === 'SECRET') {
-         if (formData.secretProfile?.alias) return formData.secretProfile.alias;
-         return formData.secretProfile?.name || '(비밀 이름 미설정)';
+      if (activeProfileId !== 'BASE') {
+         if (formData.profiles?.find(p => p.id === activeProfileId)?.alias) return formData.profiles?.find(p => p.id === activeProfileId)?.alias;
+         return formData.profiles?.find(p => p.id === activeProfileId)?.name || '(비밀 이름 미설정)';
       }
       if (formData.alias) return formData.alias;
       return formData.name || '이름 없음';
     } else {
       if (isSecretRevealed) {
-         if (formData.secretProfile?.alias) return formData.secretProfile.alias;
-         return formData.secretProfile?.name || formData.alias || formData.name;
+         if (formData.profiles?.find(p => p.id === activeProfileId)?.alias) return formData.profiles?.find(p => p.id === activeProfileId)?.alias;
+         return formData.profiles?.find(p => p.id === activeProfileId)?.name || formData.alias || formData.name;
       }
       if (formData.alias) return formData.alias;
       return formData.name;
     }
-  }, [isEditing, editLayer, isSecretRevealed, formData]);
+  }, [isEditing, activeProfileId, isSecretRevealed, formData]);
 
   
+  const handlePreviewStage = (index: number) => {
+    if (!formData.progression) return;
+    const stage = formData.progression.stages[index];
+
+    // 1. If linkedProfileId is set, use it
+    if (stage.linkedProfileId) {
+       setActiveProfileId(stage.linkedProfileId);
+       if (stage.linkedProfileId !== 'BASE') {
+          if (!isSecretRevealed && onToggleReveal) onToggleReveal(formData.id, true);
+       } else {
+          // If linked to BASE, maybe we want to hide secret?
+          // But maybe the user just wants to see BASE profile while keeping secret revealed?
+          // Let's assume if they click a stage linked to BASE, they want to see BASE.
+          // We don't necessarily need to hide secret, but we switch the view.
+       }
+       return;
+    }
+
+    // 2. Fallback to legacy reveal logic
+    if (!onToggleReveal) return;
+    const revealStage = formData.progression.revealSecretOnStage;
+    
+    if (revealStage !== undefined && index + 1 >= revealStage) {
+      onToggleReveal(formData.id, true);
+      // If we are on BASE and revealing, switch to first profile if available
+      if (activeProfileId === 'BASE' && (formData.profiles?.length || 0) > 0) {
+         setActiveProfileId(formData.profiles![0].id);
+      }
+    } else {
+      // If going back before reveal stage, hide secret and go to BASE
+      onToggleReveal(formData.id, false);
+      setActiveProfileId('BASE');
+    }
+  };
+
+  const getProfileDisplayName = (profileId: string, profileName: string) => {
+    if (profileId === 'BASE') return formData.name || '기본 (BASE)';
+    
+    // Find the stage linked to this profile
+    const linkedStage = formData.progression?.stages.find(s => s.linkedProfileId === profileId);
+    if (linkedStage) return linkedStage.title || profileName;
+    
+    return profileName;
+  };
+
   return (
     <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-md flex justify-center items-start md:items-center p-0 md:p-4 overflow-y-auto md:overflow-hidden">
       <div 
         onClick={(e) => e.stopPropagation()} 
         className={`w-full min-h-full md:min-h-0 md:h-[95vh] md:max-w-[95vw] md:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border flex flex-col md:flex-row transition-all duration-500 ${tc.bgMain} ${isSecretRevealed ? `border-current ${tc.textAccent}` : tc.border}`}
       >
+        {lockWarning && (
+          <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white px-4 py-2 text-center font-bold text-sm shadow-lg animate-pulse">
+            <Icons.Lock size={16} className="inline mr-2 mb-0.5" />
+            {lockWarning}
+          </div>
+        )}
         
         {/* Left Column - Portrait & Status (Sidebar) */}
         <div className={`w-full md:w-[512px] p-6 md:p-8 flex flex-col border-r shrink-0 ${tc.bgPanel} ${tc.border} md:overflow-y-auto custom-scrollbar`}>
           {/* ... Sidebar content omitted for brevity ... */}
           <div className="flex justify-between md:hidden mb-6">
-            <button onClick={onClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
+            <button onClick={handleClose} className="p-2 bg-black/40 rounded-full"><Icons.Close size={20} /></button>
             <button onClick={handleSave} className="px-4 py-2 bg-amber-700 text-white rounded-lg font-black text-xs">저장</button>
           </div>
           
@@ -953,7 +1096,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                <label className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-all duration-300">
                   <div className="w-12 h-12 bg-amber-500 rounded-full flex items-center justify-center text-black mb-2 shadow-lg"><Icons.Upload size={24} /></div>
                   <span className="text-[10px] font-black uppercase tracking-widest text-white">이미지 업데이트</span>
-                  <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, editLayer)} />
+                  <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, activeProfileId)} />
                </label>
             )}
 
@@ -1001,22 +1144,27 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                 <EditableField 
                   label="한 줄 소개 (Summary)" 
                   value={resolveValue('summary', 'summary')} 
-                  onChange={v => editLayer === 'SECRET' ? updateSecretField('summary', v) : setFormData(p => ({...p, summary: v}))} 
+                  onChange={v => activeProfileId !== 'BASE' ? updateProfileField('summary', v) : setFormData(p => ({...p, summary: v}))} 
                   isEditing={isEditing} 
                   type="textarea" 
                   minHeight="h-32" 
                   themeClasses={tc} 
-                  highlight={editLayer === 'SECRET'} 
+                  highlight={activeProfileId !== 'BASE'} 
                 />
              </div>
 
-             {hasSecretProfile && !isEditing && (
+             {!isEditing && (formData.profiles?.length || 0) > 0 && (
                <button 
-                  onClick={handleToggleReveal} 
-                  disabled={isGlobalReveal} 
-                  className={`w-full py-3 rounded-xl border text-[11px] font-black tracking-[0.2em] transition-all uppercase ${isSecretRevealed ? `bg-black/80 ${tc.textAccent} border-current shadow-lg` : 'bg-black/40 text-stone-600 border-stone-800'}`}
+                 onClick={() => onToggleReveal?.(formData.id, !isRevealed)}
+                 disabled={isGlobalReveal}
+                 className={`w-full py-3 rounded-xl font-black tracking-widest uppercase transition-all duration-500 flex items-center justify-center gap-2 ${
+                   isSecretRevealed 
+                     ? `${tc.buttonPrimary} opacity-90` 
+                     : 'bg-stone-900 text-stone-500 hover:bg-stone-800 hover:text-stone-300 border border-stone-800'
+                 } ${isGlobalReveal ? 'opacity-50 cursor-not-allowed' : ''}`}
                >
-                 {isGlobalReveal ? 'Global Override Active' : (isSecretRevealed ? 'Archive Decrypted' : 'Decrypt Records')}
+                 {isSecretRevealed ? <Icons.EyeOff size={18} /> : <Icons.Lock size={18} />}
+                 {isSecretRevealed ? '진척도 카드 숨기기 (HIDE PROGRESS)' : '진척도 카드 확인 (VIEW PROGRESS)'}
                </button>
              )}
           </div>
@@ -1024,22 +1172,73 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
 
         {/* Right Column - Tabs & Content */}
         <div className="flex-1 flex flex-col relative md:h-full md:overflow-hidden">
-          <div className={`sticky top-0 z-20 flex flex-col md:flex-row justify-between p-3 md:px-8 md:py-4 border-b ${tc.bgPanel} ${tc.border} backdrop-blur-xl shrink-0`}>
-             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0">
-               {['INFO', 'BIO', 'FILES', 'COMMENTS'].map(tab => (
-                 <button key={tab} onClick={() => setActiveTab(tab as any)} className={`whitespace-nowrap px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab ? 'bg-white/10 text-white shadow-inner' : 'text-stone-500 hover:text-stone-300'}`}>{tab}</button>
+          <div className={`sticky top-0 z-20 flex flex-col gap-3 p-3 md:px-8 md:py-4 border-b ${tc.bgPanel} ${tc.border} backdrop-blur-xl shrink-0`}>
+             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 w-full">
+               {['INFO', 'BIO', 'ASSETS', 'RELATIONS', 'PROGRESS', 'FILES', 'COMMENTS'].map(tab => (
+                 <button key={tab} onClick={() => setActiveTab(tab as any)} className={`whitespace-nowrap px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all shrink-0 ${activeTab === tab ? 'bg-white/10 text-white shadow-inner' : 'text-stone-500 hover:text-stone-300'}`}>{tab}</button>
                ))}
              </div>
              
-             <div className="flex items-center gap-3 mt-3 md:mt-0">
-               {isEditing && (
-                 <div className="flex items-center gap-1 bg-black/40 rounded-xl p-1 border border-stone-800">
-                    <button onClick={() => setEditLayer('PUBLIC')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${editLayer === 'PUBLIC' ? 'bg-stone-700 text-white shadow-lg' : 'text-stone-500'}`}>PUBLIC</button>
-                    {/* Secret Button - Dynamic Color */}
-                    <button onClick={() => setEditLayer('SECRET')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${editLayer === 'SECRET' ? `bg-black text-white shadow-lg ring-1 ring-white/20` : 'text-stone-500'}`}>SECRET</button>
+             <div className="flex items-center gap-3 w-full overflow-x-auto no-scrollbar pb-1">
+               {!isEditing && isSecretRevealed && (formData.profiles?.length || 0) > 0 && (
+                 <div className="flex items-center gap-1 bg-black/40 rounded-xl p-1 border border-stone-800 shrink-0">
+                    <button onClick={() => setActiveProfileId('BASE')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all whitespace-nowrap ${activeProfileId === 'BASE' ? tc.buttonPrimary : tc.buttonSecondary}`}>{formData.name || '기본 (BASE)'}</button>
+                    {(formData.profiles || []).map(profile => (
+                      <button 
+                        key={profile.id}
+                        onClick={() => setActiveProfileId(profile.id)} 
+                        className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all whitespace-nowrap ${activeProfileId === profile.id ? tc.buttonPrimary : tc.buttonSecondary}`}
+                      >
+                        {getProfileDisplayName(profile.id, profile.name)}
+                      </button>
+                    ))}
                  </div>
                )}
-               <div className="hidden md:flex items-center gap-3">
+               {isEditing && (
+                 <div className="flex items-center gap-1 bg-black/40 rounded-xl p-1 border border-stone-800 shrink-0">
+                    <button onClick={() => setActiveProfileId('BASE')} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all whitespace-nowrap ${activeProfileId === 'BASE' ? tc.buttonPrimary : tc.buttonSecondary}`}>{formData.name || '기본 (BASE)'}</button>
+                    
+                    {(formData.profiles || []).map(profile => (
+                      <button 
+                        key={profile.id}
+                        onClick={() => setActiveProfileId(profile.id)} 
+                        onDoubleClick={() => {
+                          const newName = prompt("진척도 이름을 입력하세요:", profile.name);
+                          if (newName && newName.trim()) {
+                            setFormData(prev => ({
+                              ...prev,
+                              profiles: prev.profiles?.map(p => p.id === profile.id ? { ...p, name: newName } : p)
+                            }));
+                          }
+                        }}
+                        className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all whitespace-nowrap flex items-center gap-1 ${activeProfileId === profile.id ? tc.buttonPrimary : tc.buttonSecondary}`}
+                        title="더블 클릭하여 이름 수정"
+                      >
+                        {profile.name}
+                        <div onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('이 진척도 카드를 삭제하시겠습니까?')) {
+                            setFormData(prev => ({ ...prev, profiles: prev.profiles?.filter(p => p.id !== profile.id) }));
+                            if (activeProfileId === profile.id) setActiveProfileId('BASE');
+                          }
+                        }} className="ml-1 p-0.5 hover:bg-black/20 rounded-full"><Icons.Close size={10} /></div>
+                      </button>
+                    ))}
+
+                    <button 
+                      onClick={() => {
+                        const newId = crypto.randomUUID();
+                        const newProfile = { id: newId, name: `진척도 ${(formData.profiles?.length || 0) + 1}`, extraFiles: [], comments: [] };
+                        setFormData(prev => ({ ...prev, profiles: [...(prev.profiles || []), newProfile] }));
+                        setActiveProfileId(newId);
+                      }}
+                      className="px-2 py-1.5 text-[10px] font-black rounded-lg text-stone-500 hover:text-stone-300 transition-all flex items-center"
+                    >
+                      <Icons.Plus size={14} />
+                    </button>
+                 </div>
+               )}
+               <div className="hidden md:flex items-center gap-3 ml-auto">
                  {isEditing ? (
                    <>
                      <button onClick={() => onDelete(formData.id)} className="p-2 text-red-500/50 hover:text-red-500 transition-colors bg-red-950/10 hover:bg-red-950/30 rounded-lg border border-transparent hover:border-red-900/30" title="캐릭터 삭제">
@@ -1050,7 +1249,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                  ) : (
                    <button onClick={() => setIsEditing(true)} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Edit size={22} /></button>
                  )}
-                 <button onClick={onClose} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Close size={24} /></button>
+                 <button onClick={handleClose} className="p-2 text-stone-500 hover:text-white transition-colors"><Icons.Close size={24} /></button>
                </div>
              </div>
           </div>
@@ -1064,7 +1263,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                        {/* Character Type, Alias, Name - Code Omitted for Brevity (Same as before) */}
                        {isEditing ? (
                           <>
-                           {editLayer === 'PUBLIC' ? (
+                           {activeProfileId === 'BASE' ? (
                              <>
                                <div className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-stone-800 mb-2">
                                   <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Character Type</span>
@@ -1103,8 +1302,8 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                      <span className={`text-[10px] font-black uppercase tracking-widest ${tc.textAccent}`}>Enable Secret Alias</span>
                                   </label>
                                </div>
-                               {showSecretAliasInput && <EditableField label={`${aliasLabel} (SECRET)`} value={formData.secretProfile?.alias} onChange={(v) => updateSecretField('alias', v)} isEditing={true} themeClasses={tc} highlight={true} />}
-                               <EditableField label="진명 (TRUE NAME)" value={formData.secretProfile?.name} onChange={(v) => updateSecretField('name', v)} isEditing={true} themeClasses={tc} highlight={true} />
+                               {showSecretAliasInput && <EditableField label={`${aliasLabel} (PROGRESS)`} value={formData.profiles?.find(p => p.id === activeProfileId)?.alias} onChange={(v) => updateProfileField('alias', v)} isEditing={true} themeClasses={tc} highlight={true} />}
+                               <EditableField label="진명 (TRUE NAME)" value={formData.profiles?.find(p => p.id === activeProfileId)?.name} onChange={(v) => updateProfileField('name', v)} isEditing={true} themeClasses={tc} highlight={true} />
                              </>
                            )}
                           </>
@@ -1112,10 +1311,10 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                           <>
                            {isSecretRevealed ? (
                               <>
-                                 {formData.secretProfile?.alias && (
+                                 {formData.profiles?.find(p => p.id === activeProfileId)?.alias && (
                                    <div className="mb-6">
                                       <label className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 block ${tc.textAccent}`}>{aliasLabel}</label>
-                                      <div className="text-xl font-black text-amber-100">{formData.secretProfile.alias}</div>
+                                      <div className="text-xl font-black text-amber-100">{formData.profiles?.find(p => p.id === activeProfileId)?.alias}</div>
                                    </div>
                                  )}
                                  <div className="mb-6">
@@ -1149,7 +1348,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     </div>
                     
                     <div className="col-span-2 md:col-span-1">
-                       <EditableField label={levelLabel} value={resolveValue('levelOrExp', 'levelOrExp')} onChange={v => editLayer === 'SECRET' ? updateSecretField('levelOrExp', v) : setFormData(p => ({...p, levelOrExp: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                       <EditableField label={levelLabel} value={resolveValue('levelOrExp', 'levelOrExp')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('levelOrExp', v) : setFormData(p => ({...p, levelOrExp: v}))} isEditing={isEditing} themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
                        
                        <label className={`text-[10px] font-black uppercase tracking-[0.3em] mb-2 block ${isEditing ? tc.textAccent : tc.textSub} mt-6`}>Player</label>
                        {isEditing ? (
@@ -1169,13 +1368,13 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                  </div>
 
                  <div className="p-6 bg-black/30 rounded-2xl border border-stone-800">
-                    <label className={`text-[10px] font-black uppercase tracking-[0.3em] mb-4 block ${isEditing && editLayer === 'SECRET' ? tc.textAccent : tc.textSub}`}>소속 및 태그 (AFFILIATION) {isEditing && editLayer === 'SECRET' && <span className="text-[9px] bg-black/30 px-1 rounded ml-1 tracking-normal border border-white/20">SECURE EDIT</span>}</label>
+                    <label className={`text-[10px] font-black uppercase tracking-[0.3em] mb-4 block ${isEditing && activeProfileId !== 'BASE' ? tc.textAccent : tc.textSub}`}>소속 및 태그 (AFFILIATION) {isEditing && activeProfileId !== 'BASE' && <span className="text-[9px] bg-black/30 px-1 rounded ml-1 tracking-normal border border-white/20">PROGRESS EDIT</span>}</label>
                     {isEditing ? (
                        <div className="space-y-4">
                           <div className="flex flex-wrap gap-2">
                              {currentAffiliations.map((aff, index) => {
                                 const isPublicRef = (formData.affiliations || []).some(pa => pa.name === aff.name);
-                                const isSecretStyle = !isPublicRef && editLayer === 'SECRET';
+                                const isSecretStyle = !isPublicRef && activeProfileId !== 'BASE';
                                 // Dynamic Secret Tag Style
                                 const tagStyle = isSecretStyle 
                                    ? `border-current ${tc.textAccent} ring-1 ring-white/10` 
@@ -1186,7 +1385,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                    className={`flex items-center gap-3 bg-stone-900 border rounded-xl pl-4 pr-2 py-2 text-xs font-bold cursor-move ${aff.isHidden ? 'opacity-40 border-dashed' : ''} ${tagStyle}`}>
                                    <span>{aff.name} <span className="opacity-50 font-normal">{aff.rank && `| ${aff.rank}`}</span></span>
                                    <div className="flex items-center gap-1 border-l border-stone-800 pl-2">
-                                      {editLayer === 'SECRET' && (
+                                      {activeProfileId !== 'BASE' && (
                                          <button onClick={() => toggleAffiliationHidden(index, aff)} className={`p-1.5 rounded hover:bg-stone-800 ${aff.isHidden ? 'text-stone-500' : 'text-stone-300'}`}><Icons.EyeOff size={12}/></button>
                                       )}
                                       <button onClick={() => toggleAffiliationStrikethrough(index, aff)} className={`p-1.5 rounded hover:bg-stone-800 ${aff.isStrikethrough ? 'text-amber-500' : 'text-stone-500'}`}><Icons.Strikethrough size={12}/></button>
@@ -1253,7 +1452,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                     )}
                  </div>
 
-                 <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => editLayer === 'SECRET' ? updateSecretField('appearance', v) : setFormData(p => ({...p, appearance: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                 <EditableField label="외모 묘사 (APPEARANCE)" value={resolveValue('appearance', 'appearance')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('appearance', v) : setFormData(p => ({...p, appearance: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
               </div>
             )}
 
@@ -1261,12 +1460,50 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'BIO' && (
               <div className="space-y-6 max-w-3xl">
                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <EditableField label="나이 (AGE)" value={resolveValue('age', 'age')} onChange={v => editLayer === 'SECRET' ? updateSecretField('age', v) : setFormData(p => ({...p, age: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
-                    <EditableField label="성별 (GENDER)" value={resolveValue('gender', 'gender')} onChange={v => editLayer === 'SECRET' ? updateSecretField('gender', v) : setFormData(p => ({...p, gender: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
-                    <EditableField label="키 (HEIGHT)" value={resolveValue('height', 'height')} onChange={v => editLayer === 'SECRET' ? updateSecretField('height', v) : setFormData(p => ({...p, height: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
-                    <EditableField label="몸무게 (WEIGHT)" value={resolveValue('weight', 'weight')} onChange={v => editLayer === 'SECRET' ? updateSecretField('weight', v) : setFormData(p => ({...p, weight: v}))} isEditing={isEditing} themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                    <EditableField label="나이 (AGE)" value={resolveValue('age', 'age')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('age', v) : setFormData(p => ({...p, age: v}))} isEditing={isEditing} themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
+                    <EditableField label="성별 (GENDER)" value={resolveValue('gender', 'gender')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('gender', v) : setFormData(p => ({...p, gender: v}))} isEditing={isEditing} themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
+                    <EditableField label="키 (HEIGHT)" value={resolveValue('height', 'height')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('height', v) : setFormData(p => ({...p, height: v}))} isEditing={isEditing} themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
+                    <EditableField label="몸무게 (WEIGHT)" value={resolveValue('weight', 'weight')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('weight', v) : setFormData(p => ({...p, weight: v}))} isEditing={isEditing} themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
                  </div>
-                 <EditableField label="상세 설명 (DESCRIPTION)" value={resolveValue('description', 'description')} onChange={v => editLayer === 'SECRET' ? updateSecretField('description', v) : setFormData(p => ({...p, description: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={editLayer === 'SECRET'} />
+                 <EditableField label="상세 설명 (DESCRIPTION)" value={resolveValue('description', 'description')} onChange={v => activeProfileId !== 'BASE' ? updateProfileField('description', v) : setFormData(p => ({...p, description: v}))} isEditing={isEditing} type="textarea" themeClasses={tc} highlight={activeProfileId !== 'BASE'} />
+              </div>
+            )}
+
+            {/* ASSETS TAB */}
+            {activeTab === 'ASSETS' && (
+              <div className="max-w-4xl">
+                <CharacterAssetsTab 
+                  character={formData} 
+                  isEditing={isEditing} 
+                  onChange={setFormData} 
+                />
+              </div>
+            )}
+
+            {/* RELATIONS TAB */}
+            {activeTab === 'RELATIONS' && (
+              <div className="max-w-3xl">
+                <CharacterRelationsTab 
+                  character={formData} 
+                  allCharacters={allCharacters}
+                  allCampaigns={allCampaigns}
+                  isEditing={isEditing} 
+                  onChange={setFormData} 
+                />
+              </div>
+            )}
+
+            {/* PROGRESS TAB */}
+            {activeTab === 'PROGRESS' && (
+              <div className="max-w-3xl">
+                <CharacterProgressTab 
+                  character={formData} 
+                  isEditing={isEditing} 
+                  onChange={setFormData} 
+                  onPreviewStage={handlePreviewStage}
+                  activeProfileId={activeProfileId}
+                  themeClasses={tc}
+                />
               </div>
             )}
 
@@ -1274,9 +1511,9 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             {activeTab === 'FILES' && (
                <div className="space-y-6 max-w-4xl">
                   {isEditing && (
-                     <button onClick={addExtraFile} className={`w-full py-3 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 hover:bg-white/5 transition-colors ${editLayer === 'SECRET' ? `border-current ${tc.textAccent}` : 'border-stone-700 text-stone-500'}`}>
+                     <button onClick={addExtraFile} className={`w-full py-3 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 hover:bg-white/5 transition-colors ${activeProfileId !== 'BASE' ? `border-current ${tc.textAccent}` : 'border-stone-700 text-stone-500'}`}>
                         <Icons.Plus size={20} />
-                        <span>{editLayer === 'SECRET' ? '시크릿 파일 추가' : '파일 추가'}</span>
+                        <span>{activeProfileId !== 'BASE' ? '진척도 파일 추가' : '파일 추가'}</span>
                      </button>
                   )}
                   
@@ -1536,7 +1773,20 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                                     {(isEditing || comment.userName === commentName) && ( // Allow edit if name matches or in global edit mode
                                        <div className="flex gap-1 ml-2">
                                           <button onClick={() => startEditingComment(comment)} className="hover:text-amber-400"><Icons.Edit size={12} /></button>
-                                          <button onClick={() => confirmDeleteComment(comment.id)} className="hover:text-red-400"><Icons.Close size={12} /></button>
+                                          <button 
+                                            onClick={() => {
+                                              if (confirmDeleteCommentId === comment.id) {
+                                                confirmDeleteComment(comment.id);
+                                              } else {
+                                                setConfirmDeleteCommentId(comment.id);
+                                                setTimeout(() => setConfirmDeleteCommentId(null), 3000);
+                                              }
+                                            }} 
+                                            className={`transition-colors ${confirmDeleteCommentId === comment.id ? 'text-red-500 bg-red-500/10 rounded' : 'hover:text-red-400'}`}
+                                            title={confirmDeleteCommentId === comment.id ? "한 번 더 눌러 삭제" : "삭제"}
+                                          >
+                                            <Icons.Close size={12} />
+                                          </button>
                                        </div>
                                     )}
                                  </div>
@@ -1567,7 +1817,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
         isOpen={isTagLibraryOpen}
         onClose={() => setIsTagLibraryOpen(false)}
         groupedTags={groupedTags}
-        existingTags={(formData.affiliations || []).map(a => a.name)}
+        existingTags={(activeProfileId !== 'BASE' ? currentAffiliations : formData.affiliations || []).map(a => a.name)}
         onAddTag={(tag) => {
           const newAff: CharacterAffiliation = {
             id: crypto.randomUUID(),
@@ -1576,10 +1826,19 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
             isStrikethrough: false,
             isHidden: false
           };
-          setFormData(prev => ({
-             ...prev,
-             affiliations: [...(prev.affiliations || []), newAff]
-          }));
+          
+          if (activeProfileId !== 'BASE') {
+             const currentList = currentAffiliations;
+             const cleanList = [...currentList, newAff].map(a => 
+               a.id.startsWith('virtual-') ? { ...a, id: crypto.randomUUID() } : a
+             );
+             updateProfileField('affiliations', cleanList);
+          } else {
+             setFormData(prev => ({
+                ...prev,
+                affiliations: [...(prev.affiliations || []), newAff]
+             }));
+          }
         }}
         themeColor={tc.textAccent}
       />

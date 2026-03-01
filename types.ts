@@ -62,6 +62,69 @@ export interface SecretProfile {
   comments?: CharacterComment[];
 }
 
+export interface CharacterProfile extends SecretProfile {
+  id: string;
+  name: string;
+}
+
+export interface CharacterAsset {
+  id: string;
+  characterId: string;
+  name: string;
+  assetType: 'EQUIPMENT' | 'SPELL' | 'ARTIFACT' | 'CYBERWARE' | 'ABILITY' | 'OTHER';
+  subType?: string;
+  description: string;
+  shortDescription?: string;
+  rarity?: string;
+  status?: string; 
+  imageUrl?: string;
+  linkUrl?: string;
+  isSecret: boolean;
+  sortOrder?: number;
+  acquiredInEventId?: string;
+  notes?: string;
+}
+
+export interface CharacterRelation {
+  id: string;
+  sourceCharacterId: string;
+  targetCharacterId: string;
+  relationType: 'ALLY' | 'ENEMY' | 'FAMILY' | 'LOVE' | 'BUSINESS' | 'SECRET' | 'OTHER';
+  description: string;
+  isSecret: boolean;
+  strength?: number;
+  isDirected?: boolean;
+  campaignId?: string;
+}
+
+export interface CharacterProgressStage {
+  id: string;
+  title: string;
+  description: string;
+  isCompleted: boolean;
+  unlockedAt?: number;
+  linkedProfileId?: string;
+}
+
+export interface CharacterProgress {
+  id?: string;
+  characterId?: string;
+  progressType?: string;
+  label?: string;
+  currentValue?: number;
+  maxValue?: number;
+  status?: string;
+  description?: string;
+  isPublic?: boolean;
+  sortOrder?: number;
+  
+  // Legacy/UI support
+  currentStageIndex: number;
+  stages: CharacterProgressStage[];
+  isSecret: boolean; 
+  revealSecretOnStage?: number; 
+}
+
 export interface Character {
   id: string;
   campaignId: string;
@@ -91,7 +154,18 @@ export interface Character {
   extraFiles: ExtraFile[];
   comments: CharacterComment[]; 
   secretProfile?: SecretProfile;
+  profiles?: CharacterProfile[];
+  
+  // New Features
+  assets?: CharacterAsset[];
+  relations?: CharacterRelation[];
+  progression?: CharacterProgress;
+
   updatedAt: number;
+  
+  // Locking
+  lockedBy?: string; // Session ID
+  lockedAt?: number; // Timestamp
 }
 
 export interface Campaign {

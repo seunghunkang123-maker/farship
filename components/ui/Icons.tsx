@@ -31,7 +31,17 @@ import {
   Italic,
   Library,
   Tags,
-  Check
+  Check,
+  Sword,
+  Scroll,
+  Gem,
+  Cpu,
+  Zap,
+  Box,
+  Link,
+  List,
+  Share2,
+  ChevronDown
 } from 'lucide-react';
 
 export const Icons = {
@@ -66,5 +76,15 @@ export const Icons = {
   Italic,
   Library,
   Tags,
-  Check
+  Check,
+  Sword,
+  Scroll,
+  Gem,
+  Cpu,
+  Zap,
+  Box,
+  Link,
+  List,
+  Network: Share2,
+  ChevronDown
 };
