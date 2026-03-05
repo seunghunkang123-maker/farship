@@ -522,20 +522,7 @@ const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                         </div>
                      )}
 
-                     {char.progression && char.progression.stages.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          <div className="flex justify-between text-[9px] opacity-50">
-                            <span>Progress</span>
-                            <span>{char.progression.currentStageIndex} / {char.progression.stages.length}</span>
-                          </div>
-                          <div className="h-1 w-full bg-black/30 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full transition-all duration-500 ${isRevealed ? 'bg-current' : 'bg-amber-600'}`}
-                              style={{ width: `${(char.progression.currentStageIndex / char.progression.stages.length) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                     )}
+                     {/* Progression Overlay Removed */}
 
                      {showTags && displayTags.length > 0 && (
                         <div className="mt-2 pt-2 border-t border-dashed border-white/10 flex flex-wrap gap-1.5">

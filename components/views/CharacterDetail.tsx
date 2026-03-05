@@ -1021,6 +1021,16 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
     if (!formData.progression) return;
     const stage = formData.progression.stages[index];
 
+    // Update the current stage index to reflect what is being viewed
+    // This satisfies the requirement: "When I check progress... make that reflected"
+    setFormData(prev => ({
+       ...prev,
+       progression: {
+          ...prev.progression!,
+          currentStageIndex: index + 1
+       }
+    }));
+
     // 1. If linkedProfileId is set, use it
     if (stage.linkedProfileId) {
        setActiveProfileId(stage.linkedProfileId);
@@ -1686,7 +1696,7 @@ const CharacterDetail: React.FC<CharacterDetailProps> = ({
                      <textarea 
                         value={commentText}
                         onChange={e => setCommentText(e.target.value)}
-                        className={`w-full bg-black/20 rounded-lg p-3 text-sm min-h-[100px] outline-none resize-none mb-3 ${tc.textMain} placeholder:text-stone-600`}
+                        className={`w-full bg-black/20 rounded-lg p-3 text-sm min-h-[100px] outline-none resize-none mb-3 ${tc.textMain} placeholder:text-stone-600 ${COMMENT_FONTS[commentFont as keyof typeof COMMENT_FONTS]?.class || ''}`}
                         placeholder="기록을 남기세요..."
                      />
                      <div className="flex items-center justify-between">

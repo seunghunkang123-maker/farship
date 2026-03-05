@@ -4,6 +4,7 @@ import { Campaign, Character } from '../../types';
 import { Icons } from '../ui/Icons';
 import { THEMES, THEME_KEYS } from '../../constants';
 import { getOptimizedImageUrl } from '../../utils/imageUtils';
+import RelationshipGraph from '../features/RelationshipGraph';
 
 interface AllCharactersViewProps {
   campaigns: Campaign[];
@@ -27,6 +28,7 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
 }) => {
   const [sortOrder, setSortOrder] = useState<'NAME' | 'RECENT' | 'LEVEL'>('RECENT');
   const [groupByCampaign, setGroupByCampaign] = useState(true);
+  const [viewMode, setViewMode] = useState<'GRID' | 'GRAPH'>('GRID');
 
   // Sorting Function
   const sortCharacters = (chars: Character[]) => {
@@ -155,16 +157,22 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
           {/* Group Toggle */}
           <div className="flex bg-stone-900/50 p-1 rounded-lg border border-stone-800">
              <button
-                onClick={() => setGroupByCampaign(true)}
-                className={`flex items-center gap-2 px-3 py-1 text-xs font-bold rounded transition-all ${groupByCampaign ? 'bg-amber-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
+                onClick={() => { setGroupByCampaign(true); setViewMode('GRID'); }}
+                className={`flex items-center gap-2 px-3 py-1 text-xs font-bold rounded transition-all ${groupByCampaign && viewMode === 'GRID' ? 'bg-amber-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
              >
                 <Icons.Folder size={14}/> <span className="hidden sm:inline">캠페인별</span>
              </button>
              <button
-                onClick={() => setGroupByCampaign(false)}
-                className={`flex items-center gap-2 px-3 py-1 text-xs font-bold rounded transition-all ${!groupByCampaign ? 'bg-amber-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
+                onClick={() => { setGroupByCampaign(false); setViewMode('GRID'); }}
+                className={`flex items-center gap-2 px-3 py-1 text-xs font-bold rounded transition-all ${!groupByCampaign && viewMode === 'GRID' ? 'bg-amber-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
              >
                 <Icons.Users size={14}/> <span className="hidden sm:inline">전체보기</span>
+             </button>
+             <button
+                onClick={() => setViewMode('GRAPH')}
+                className={`flex items-center gap-2 px-3 py-1 text-xs font-bold rounded transition-all ${viewMode === 'GRAPH' ? 'bg-amber-700 text-white shadow' : 'text-stone-500 hover:text-stone-300'}`}
+             >
+                <Icons.Network size={14}/> <span className="hidden sm:inline">관계도</span>
              </button>
           </div>
 
@@ -187,7 +195,20 @@ const AllCharactersView: React.FC<AllCharactersViewProps> = ({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar space-y-12 pb-20">
         
-        {groupByCampaign ? (
+        {viewMode === 'GRAPH' ? (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 h-[calc(100vh-150px)]">
+            <RelationshipGraph 
+              characters={characters}
+              relations={characters.flatMap(c => c.relations || [])}
+              onNodeClick={onSelectCharacter}
+              width={1200}
+              height={800}
+              groupByCampaign={true}
+              campaigns={campaigns}
+              isGlobalReveal={true} // Show all relations in global view
+            />
+          </div>
+        ) : groupByCampaign ? (
           // --- GROUPED VIEW ---
           campaigns.map(campaign => {
             const campaignChars = charactersByCampaign[campaign.id] || [];

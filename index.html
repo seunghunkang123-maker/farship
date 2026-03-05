@@ -25,6 +25,12 @@
       .font-mono { font-family: 'Nanum Gothic Coding', monospace; } /* 기계적/코딩 */
       .font-hand { font-family: 'Nanum Pen Script', cursive; } /* 손글씨 */
       
+      /* 손글씨 폰트는 작게 보이므로 강제로 크기를 키움 */
+      .font-hand, .font-hand .text-sm, .font-hand textarea {
+        font-size: 1.8rem !important;
+        line-height: 1.4 !important;
+      }
+      
       /* 세련된 스크롤바 */
       ::-webkit-scrollbar {
         width: 6px;

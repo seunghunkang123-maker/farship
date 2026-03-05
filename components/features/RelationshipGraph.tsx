@@ -11,6 +11,8 @@ interface RelationshipGraphProps {
   onNodeClick?: (characterId: string) => void;
   width?: number;
   height?: number;
+  groupByCampaign?: boolean;
+  campaigns?: { id: string, name: string, theme?: string }[];
 }
 
 const RelationshipGraph: React.FC<RelationshipGraphProps> = ({ 
@@ -20,7 +22,9 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   isGlobalReveal = false,
   onNodeClick,
   width = 800, 
-  height = 600 
+  height = 600,
+  groupByCampaign = false,
+  campaigns = []
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
@@ -73,8 +77,35 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     const simulation = d3.forceSimulation(filteredNodes as any)
       .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(150)) // Increased distance for portraits
       .force("charge", d3.forceManyBody().strength(-800)) // Stronger repulsion to prevent overlap
-      .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(60)); // Larger collision radius for portraits
+
+    if (groupByCampaign && campaigns.length > 0) {
+      // Group by campaign logic
+      const campaignIds = Array.from(new Set(filteredNodes.map(n => n.campaignId)));
+      const numCampaigns = campaignIds.length;
+      
+      // Arrange campaign centers in a circle
+      const radius = Math.max(300, numCampaigns * 150); // Dynamic radius based on number of campaigns
+      const centers: Record<string, {x: number, y: number}> = {};
+      
+      campaignIds.forEach((id, i) => {
+        const angle = (i / numCampaigns) * 2 * Math.PI;
+        centers[id] = {
+          x: width / 2 + radius * Math.cos(angle),
+          y: height / 2 + radius * Math.sin(angle)
+        };
+      });
+
+      // Add forces to pull nodes to their campaign center
+      simulation
+        .force("x", d3.forceX((d: any) => centers[d.campaignId]?.x || width / 2).strength(0.1))
+        .force("y", d3.forceY((d: any) => centers[d.campaignId]?.y || height / 2).strength(0.1))
+        .force("center", d3.forceCenter(width / 2, height / 2).strength(0.01)); // Weak center to keep everything somewhat centered
+      
+    } else {
+      // Default center force
+      simulation.force("center", d3.forceCenter(width / 2, height / 2));
+    }
 
     // --- Zoom Behavior ---
     const zoom = d3.zoom<SVGSVGElement, unknown>()
@@ -90,6 +121,52 @@ const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     
     // Container for zoomable content
     const container = svg.append("g");
+
+    // Draw Campaign Backgrounds (Giant Spheres) - Render FIRST to be in background
+    if (groupByCampaign && campaigns.length > 0) {
+      const campaignIds = Array.from(new Set(filteredNodes.map(n => n.campaignId)));
+      const numCampaigns = campaignIds.length;
+      const radius = Math.max(300, numCampaigns * 150);
+      const centers: Record<string, {x: number, y: number}> = {};
+      
+      campaignIds.forEach((id, i) => {
+        const angle = (i / numCampaigns) * 2 * Math.PI;
+        centers[id] = {
+          x: width / 2 + radius * Math.cos(angle),
+          y: height / 2 + radius * Math.sin(angle)
+        };
+      });
+
+      const campaignGroups = container.append("g").attr("class", "campaign-backgrounds");
+      
+      campaignIds.forEach(id => {
+        const center = centers[id];
+        const campaign = campaigns.find(c => c.id === id);
+        if (center && campaign) {
+          // Draw a large faint circle for the campaign
+          campaignGroups.append("circle")
+            .attr("cx", center.x)
+            .attr("cy", center.y)
+            .attr("r", 250) // Giant sphere
+            .attr("fill", "rgba(245, 158, 11, 0.03)") // Faint amber
+            .attr("stroke", "rgba(245, 158, 11, 0.1)")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "10, 10");
+            
+          // Add campaign name label
+          campaignGroups.append("text")
+            .attr("x", center.x)
+            .attr("y", center.y - 260)
+            .attr("text-anchor", "middle")
+            .text(campaign.name)
+            .attr("fill", "rgba(245, 158, 11, 0.5)")
+            .attr("font-size", "24px")
+            .attr("font-weight", "bold")
+            .attr("font-family", "serif")
+            .style("pointer-events", "none");
+        }
+      });
+    }
 
     // Defs for Images
     const defs = svg.append("defs");

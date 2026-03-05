@@ -60,104 +60,121 @@ const CharacterProgressTab: React.FC<Props> = ({ character, isEditing, onChange,
     setConfirmDeleteId(null);
   };
 
-  const toggleComplete = (index: number) => {
-    let nextIndex = index + 1;
-    if (progression.currentStageIndex === index + 1) {
-       nextIndex = index;
-    }
-
-    onChange({
-      ...character,
-      progression: { ...progression, currentStageIndex: nextIndex }
-    });
-  };
-
   return (
     <div className="space-y-8 p-1">
       <div className="flex justify-between items-center">
-        <h3 className={`text-lg font-serif ${themeClasses.textSub}`}>서사 진척도</h3>
-        {isEditing && (
-          <button
-            onClick={handleAddStage}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${themeClasses.buttonSecondary}`}
-          >
-            <Icons.Plus size={16} />
-            <span>단계 추가</span>
-          </button>
-        )}
+        <h3 className={`text-lg font-serif ${themeClasses.textSub}`}>서사 진척도 (NARRATIVE PROGRESSION)</h3>
       </div>
 
       {/* Timeline / Steps */}
       {progression.stages.length === 0 ? (
         <div className={`text-center py-12 border border-dashed rounded-xl ${themeClasses.textSub} ${themeClasses.border}`}>
           <Icons.List className="mx-auto mb-2 opacity-50" size={32} />
-          <p>등록된 진척 단계가 없습니다.</p>
+          <p className="mb-4">등록된 진척 단계가 없습니다.</p>
+          {isEditing && (
+             <button
+               onClick={handleAddStage}
+               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors mx-auto ${themeClasses.buttonSecondary}`}
+             >
+               <Icons.Plus size={16} />
+               <span>첫 단계 추가하기</span>
+             </button>
+          )}
         </div>
       ) : (
-        <div className={`relative pl-4 md:pl-8 space-y-8 before:absolute before:left-[23px] md:before:left-[39px] before:top-2 before:bottom-2 before:w-0.5 before:bg-stone-800`}>
+        <div className="relative pl-6 md:pl-10 space-y-12">
+          {/* Vertical Line */}
+          <div className="absolute left-[27px] md:left-[43px] top-4 bottom-4 w-0.5 bg-gradient-to-b from-stone-700 via-stone-800 to-transparent opacity-50" />
+
           <AnimatePresence>
             {progression.stages.map((stage, index) => {
               const isCompleted = index < progression.currentStageIndex;
               const isCurrent = index === progression.currentStageIndex;
+              const isFuture = index > progression.currentStageIndex;
               const isLinkedActive = stage.linkedProfileId && stage.linkedProfileId === activeProfileId;
-              const isHighlighted = isCompleted || isCurrent || isLinkedActive;
               
-              // Dynamic Styles based on Theme
-              let circleStyle = `${themeClasses.bgMain} ${themeClasses.border} ${themeClasses.textSub}`; // Default
-              
-              if (isCompleted) {
-                 circleStyle = `${themeClasses.buttonPrimary} border-transparent`;
-              } else if (isCurrent || isLinkedActive) {
-                 circleStyle = `${themeClasses.bgMain} border-current ${themeClasses.textAccent} scale-110 shadow-[0_0_10px_rgba(0,0,0,0.3)]`;
+              // Check if ANY stage is currently being viewed (linked active)
+              // If so, we suppress the default "Current" pulse to avoid confusion
+              const isAnyLinkedActive = progression.stages.some(s => s.linkedProfileId && s.linkedProfileId === activeProfileId);
+
+              // Determine Styles
+              let nodeColor = "bg-stone-800 border-stone-600 text-stone-500";
+              let textColor = themeClasses.textSub;
+              let borderColor = themeClasses.border;
+              let opacity = "opacity-100"; // Always fully visible
+              let isPulsing = false;
+
+              if (isLinkedActive) {
+                // Viewing this stage -> High Priority Highlight
+                nodeColor = `bg-stone-900 border-current ${themeClasses.textAccent} shadow-[0_0_20px_rgba(245,158,11,0.6)] scale-110`;
+                textColor = themeClasses.textAccent;
+                borderColor = `border-current ${themeClasses.textAccent}`;
+                isPulsing = true;
+              } else if (isCurrent) {
+                // Current Stage
+                if (isAnyLinkedActive) {
+                   // If viewing another stage, show Current as "Active but not focused"
+                   nodeColor = `bg-stone-900 border-current ${themeClasses.textAccent} shadow-none`;
+                   textColor = themeClasses.textAccent;
+                   borderColor = `border-current ${themeClasses.textAccent}`;
+                } else {
+                   // Default state: Current is focused
+                   nodeColor = `bg-stone-900 border-current ${themeClasses.textAccent} shadow-[0_0_15px_rgba(245,158,11,0.4)] scale-110`;
+                   textColor = themeClasses.textAccent;
+                   borderColor = `border-current ${themeClasses.textAccent}`;
+                   isPulsing = true;
+                }
+              } else if (isCompleted) {
+                nodeColor = `${themeClasses.buttonPrimary} border-transparent text-white shadow-lg shadow-amber-900/20`;
+                textColor = themeClasses.textMain;
+              } else {
+                // Subsequent stages
+                textColor = themeClasses.textMain;
               }
 
               return (
                 <motion.div 
                   key={stage.id} 
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className={`relative flex items-start gap-4 group ${!isEditing && onPreviewStage ? 'cursor-pointer' : ''}`}
+                  className={`relative flex items-start gap-6 group ${!isEditing && onPreviewStage ? 'cursor-pointer' : ''} ${opacity}`}
                   onClick={() => {
                     if (!isEditing && onPreviewStage) {
                       onPreviewStage(index);
                     }
                   }}
                 >
-                  {/* Node */}
-                  <button
-                    onClick={(e) => {
-                      if (isEditing) {
-                        e.stopPropagation();
-                        toggleComplete(index);
-                      }
-                    }}
-                    title={isEditing ? (isCompleted ? "진행 취소" : "여기까지 완료 처리") : "이 단계의 상태로 프로필 보기"}
-                    className={`relative z-10 shrink-0 w-6 h-6 md:w-8 md:h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isEditing ? 'cursor-pointer hover:scale-110' : ''} ${circleStyle}`}
-                  >
-                    {isCompleted ? <Icons.Check size={14} strokeWidth={3} /> : <span className="text-xs font-bold">{index + 1}</span>}
-                  </button>
+                  {/* Node Indicator */}
+                  <div className="relative z-10 flex flex-col items-center gap-1">
+                     <div
+                       className={`w-8 h-8 md:w-10 md:h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${nodeColor} ${isPulsing ? 'animate-pulse' : ''}`}
+                     >
+                       <span className="text-xs md:text-sm font-bold font-mono">{index + 1}</span>
+                     </div>
+                     {isCurrent && <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${themeClasses.textAccent} ${!isAnyLinkedActive ? 'animate-pulse' : 'opacity-50'}`}>Current</div>}
+                     {isLinkedActive && !isCurrent && <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${themeClasses.textAccent} animate-pulse`}>Viewing</div>}
+                  </div>
 
-                  {/* Content */}
-                  <div className={`flex-1 pt-1 transition-opacity duration-300 ${isHighlighted ? 'opacity-100' : 'opacity-40'}`}>
-                    
+                  {/* Content Card */}
+                  <div className={`flex-1 -mt-1 transition-all duration-300 ${isLinkedActive || (isCurrent && !isAnyLinkedActive) ? 'scale-[1.02]' : ''}`}>
                     {isEditing ? (
-                      <div className={`bg-black/20 border rounded-xl p-4 space-y-3 ${themeClasses.border}`}>
+                      <div className={`bg-black/40 backdrop-blur-sm border rounded-xl p-4 space-y-3 shadow-xl ${borderColor}`}>
                         <div className="flex items-start justify-between gap-4">
                           <input
                             value={stage.title}
                             onChange={e => handleUpdateStage(stage.id, { title: e.target.value })}
-                            placeholder="단계 제목 (예: 각성, 비밀의 폭로)"
-                            className={`flex-1 bg-transparent border-b focus:border-opacity-100 outline-none px-1 py-1 text-base md:text-lg font-serif font-medium ${isCompleted ? themeClasses.textAccent : themeClasses.textMain} ${themeClasses.border}`}
+                            placeholder="단계 제목 (예: 각성)"
+                            className={`flex-1 bg-transparent border-b focus:border-opacity-100 outline-none px-1 py-1 text-base md:text-lg font-serif font-bold ${textColor} ${themeClasses.border}`}
                           />
                           
                           <div className="flex items-center gap-2 shrink-0">
                             <select
                               value={stage.linkedProfileId || ''}
                               onChange={(e) => handleUpdateStage(stage.id, { linkedProfileId: e.target.value || undefined })}
-                              className={`text-xs rounded-md px-2 py-1 outline-none border bg-black ${themeClasses.border} ${themeClasses.textSub}`}
+                              className={`text-xs rounded-lg px-2 py-1.5 outline-none border bg-black/50 ${themeClasses.border} ${themeClasses.textSub} hover:bg-black/80 transition-colors`}
                             >
-                              <option value="">(연동 프로필 없음)</option>
+                              <option value="">(연동 없음)</option>
                               <option value="BASE">기본 (BASE)</option>
                               {(character.profiles || []).map(p => (
                                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -173,10 +190,9 @@ const CharacterProgressTab: React.FC<Props> = ({ character, isEditing, onChange,
                                   setTimeout(() => setConfirmDeleteId(null), 3000);
                                 }
                               }}
-                              className={`p-1.5 rounded-md transition-colors ${confirmDeleteId === stage.id ? 'text-red-500 bg-red-500/10' : 'text-stone-500 hover:text-red-500 hover:bg-stone-800'}`}
-                              title={confirmDeleteId === stage.id ? "한 번 더 눌러 삭제" : "삭제"}
+                              className={`p-1.5 rounded-lg transition-colors ${confirmDeleteId === stage.id ? 'text-red-500 bg-red-500/10' : 'text-stone-500 hover:text-red-400 hover:bg-stone-800'}`}
                             >
-                              <Icons.Trash size={14} />
+                              <Icons.Trash size={16} />
                             </button>
                           </div>
                         </div>
@@ -184,23 +200,25 @@ const CharacterProgressTab: React.FC<Props> = ({ character, isEditing, onChange,
                         <textarea
                           value={stage.description}
                           onChange={e => handleUpdateStage(stage.id, { description: e.target.value })}
-                          placeholder="이 단계에서 일어나는 일이나 조건..."
-                          className={`w-full bg-black/20 border rounded-lg px-3 py-2 text-sm outline-none min-h-[60px] resize-y ${themeClasses.textMain} ${themeClasses.border}`}
+                          placeholder="내용 입력..."
+                          className={`w-full bg-black/20 border rounded-lg px-3 py-2 text-sm outline-none min-h-[80px] resize-y ${themeClasses.textMain} ${themeClasses.border} focus:bg-black/40 transition-colors`}
                         />
                       </div>
                     ) : (
-                      <div className="pt-1">
-                        <h4 className={`text-base md:text-lg font-serif font-medium flex items-center gap-2 ${isCompleted || isLinkedActive ? themeClasses.textAccent : themeClasses.textMain}`}>
-                          {stage.title || '(제목 없음)'}
-                          {stage.linkedProfileId && (
-                            <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 border rounded-full font-bold tracking-wider ${themeClasses.textAccent} border-current opacity-80`}>
-                              <Icons.Link size={10} />
-                              프로필 변경
-                            </span>
-                          )}
-                        </h4>
-                        <p className={`text-sm mt-2 leading-relaxed whitespace-pre-wrap ${themeClasses.textSub}`}>
-                          {stage.description}
+                      <div className={`p-4 rounded-xl border transition-all duration-300 ${isCurrent ? `bg-black/40 ${borderColor} shadow-lg` : 'border-transparent hover:bg-white/5'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                           <h4 className={`text-lg md:text-xl font-serif font-bold ${textColor}`}>
+                             {stage.title || 'Untitled Chapter'}
+                           </h4>
+                           {stage.linkedProfileId && (
+                             <div className={`flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full font-bold tracking-wider uppercase border bg-black/30 backdrop-blur-sm ${isCompleted || isCurrent ? `${themeClasses.textAccent} border-current` : 'text-stone-500 border-stone-700'}`}>
+                               <Icons.User size={12} />
+                               <span>New Look</span>
+                             </div>
+                           )}
+                        </div>
+                        <p className={`text-sm md:text-base leading-relaxed whitespace-pre-wrap font-sans ${themeClasses.textSub}`}>
+                          {stage.description || 'No description available.'}
                         </p>
                       </div>
                     )}
@@ -209,6 +227,18 @@ const CharacterProgressTab: React.FC<Props> = ({ character, isEditing, onChange,
               );
             })}
           </AnimatePresence>
+          
+          {/* Add Button at the end of timeline */}
+          {isEditing && (
+             <div className="pl-[27px] md:pl-[43px] relative z-10">
+                <button
+                  onClick={handleAddStage}
+                  className={`w-8 h-8 md:w-10 md:h-10 -ml-4 md:-ml-5 rounded-full border-2 border-dashed flex items-center justify-center transition-all hover:scale-110 hover:border-solid hover:bg-stone-800 ${themeClasses.border} ${themeClasses.textSub}`}
+                >
+                  <Icons.Plus size={16} />
+                </button>
+             </div>
+          )}
         </div>
       )}
     </div>
